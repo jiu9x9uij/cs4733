@@ -1,17 +1,11 @@
-# Object files
-*.o
+# Windows default autosave extension
+*.asv
 
-# Libraries
-*.lib
-*.a
+# OSX / *nix default autosave extension
+*.m~
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+# Compiled MEX binaries (all platforms)
+*.mex*
 
-# Executables
-*.exe
-*.out
-*.app
+# Simulink Code Generation	
+slprj/
