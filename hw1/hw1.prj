@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <deployment-project plugin="plugin.apptool" plugin-version="1.0">
-  <configuration target="target.mlapps" target-name="Package App" name="Untitled1" location="C:\Users\AldenQuimby\Documents\MATLAB" file="C:\Users\AldenQuimby\Documents\MATLAB\Untitled1.prj">
-    <param.appname />
+  <configuration target="target.mlapps" target-name="Package App" name="hw1" location="C:\src\columbia\cs4733\hw1" file="C:\src\columbia\cs4733\hw1\hw1.prj" build-checksum="4240970128">
+    <param.appname>hw1</param.appname>
     <param.authnamewatermark />
     <param.email />
     <param.company />
@@ -10,15 +10,22 @@
     <param.description />
     <param.screenshot />
     <param.version>1.0</param.version>
-    <param.products.name />
-    <param.products.id />
-    <param.products.version />
+    <param.products.name>
+      <item>Statistics Toolbox</item>
+      <item>MATLAB</item>
+    </param.products.name>
+    <param.products.id>
+      <item>19</item>
+      <item>1</item>
+    </param.products.id>
+    <param.products.version>
+      <item>8.2</item>
+      <item>8.1</item>
+    </param.products.version>
     <param.platforms />
-    <param.output>${PROJECT_ROOT}\App Name.mlappinstall</param.output>
-    <param.guid />
+    <param.output>${PROJECT_ROOT}\hw1.mlappinstall</param.output>
+    <param.guid>627a4fcd-fe97-4f7a-bfde-b666cae4bc2f</param.guid>
     <unset>
-      <param.appname />
-      <param.authnamewatermark />
       <param.email />
       <param.company />
       <param.icon />
@@ -26,19 +33,16 @@
       <param.description />
       <param.screenshot />
       <param.version />
-      <param.products.name />
-      <param.products.id />
-      <param.products.version />
       <param.platforms />
-      <param.output />
-      <param.guid />
     </unset>
-    <fileset.main />
+    <fileset.main>
+      <file>${PROJECT_ROOT}\followWallEdge.m</file>
+    </fileset.main>
     <fileset.depfun />
     <fileset.resources />
     <fileset.package />
     <build-deliverables>
-      <file name="App Name.mlappinstall" location="C:\Users\AldenQuimby\Documents\MATLAB" optional="false">C:\Users\AldenQuimby\Documents\MATLAB\App Name.mlappinstall</file>
+      <file name="hw1.mlappinstall" location="C:\src\columbia\cs4733\hw1" optional="false">C:\src\columbia\cs4733\hw1\hw1.mlappinstall</file>
     </build-deliverables>
     <workflow />
     <matlab>
