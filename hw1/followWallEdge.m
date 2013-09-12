@@ -1,101 +1,173 @@
 function followWallEdge(serPort)
+% Drives forward until a wall is found, then circumnavigates the wall 
+% counter-clockwise by using the bump sensors.
+%
+% Input:
+% serPort - Serial port for communicating with robot
 
-    % Constant definitions
-    maxDuration= 1200; % max execution time (s)
-    turnV= 0.2;        % velocity while turning (m/s)
-    v= 0.3;            % linear robot velocity (m/s)
-    turnDegrees= 60;   % amount to turn when wall hit (degrees)
-    turnRadius= 0.3;   % radius when driving around (radians)
+    disp('Starting followWallEdge');
 
-    % Start robot moving
-    SetFwdVelAngVelCreate(serPort, v, 0)
+    % constants
+    maxDuration= 1200;  % max time to allow the program to run (s)
+    maxDistSansBump= 5; % max distance to travel without obstacles (m)
+    maxFwdVel= 0.5;     % max allowable forward velocity (m/s)
+    defaultArc = -.8;   % default angular arc, represents how closely 
+                        % it follows the walls (bigger means tighter)
+    minDist = 1;        % distance you must travel before can check if back
+                        % in starting position
+    distCushion = .2;   % how close you have to be to the starting
     
-    % Continue until a wall is hit
-    [BumpRight, BumpLeft, BumpFront]= continueToWall(serPort);
+    % initialize loop variables
+    tStart= tic;        % time limit marker
+    totalDist = 0;      % total travel distance
+    backAtStart = 0;    % true when wall has been circumnavigated
+    distSansBump= 0;    % distance traveled without hitting obstacles (m)
+    hitFirstWall= 0;    % true after we hit a wall for the first time
+    xStart = 0;         % x-coord where we start circumnavigation
+    yStart = 0;         % y-coord where we start circumnavigation
     
-    % Stop robot moving
-    SetFwdVelAngVelCreate(serPort, 0, 0)
+    % start robot moving
+    SetFwdVelAngVelCreate(serPort, maxFwdVel, 0)
     
-    % If no wall was found, bail
-    if (~BumpRight && ~BumpLeft && ~BumpFront)
-        disp('did not find a wall, nothing to do!');
-        return;
-    end
-    
-    % Record starting position so we know when to stop
-    [xStart, yStart, ~]= OverheadLocalizationCreate(serPort);
+    % loop until we've circumnavigated
+    while ~backAtStart
         
-    fprintf('xStart %d, yStart %d\n', xStart, yStart); 
-    
-    % Init loop variables
-    backAtStart= 0;
-    tStart= tic;
-
-    % Enter main loop
-    while toc(tStart) < maxDuration && ~backAtStart
-        
-        fprintf('BumpRight %d, BumpLeft %d, BumpFront %d\n', ...
-            BumpRight, BumpLeft, BumpFront); 
-        
-        % turn away from contanct
-        if (BumpRight)
-            % counter-clockwise
-            turnAngle(serPort, turnV, turnDegrees);
-            SetFwdVelRadiusRoomba(serPort, v, -turnRadius);
-        elseif (BumpFront)
-            % counter-clockwise
-            turnAngle(serPort, turnV, turnDegrees*2);
-            SetFwdVelRadiusRoomba(serPort, v, -turnRadius);            
-        else
-            % clockwise
-            turnAngle(serPort, maxTurnV, -turnDegrees);
-            SetFwdVelRadiusRoomba(serPort, v, turnRadius);
-        end
-        
-        % Continue until a wall is hit
-        [BumpRight, BumpLeft, BumpFront]= continueToWall(serPort);
-        
-        % Stop robot moving
-        SetFwdVelAngVelCreate(serPort, 0, 0)
-
-        % if we didn't hit anything, bail
-        if (~BumpRight && ~BumpLeft && ~BumpFront)
-            disp('oh noes! I got incredibly lost!');
+        % bail if we've gone too far without a wall
+        if (distSansBump > maxDistSansBump)
+            disp('Failed to find a wall');
             return;
         end
         
-        % Check position and see how far we are from start
+        % bail if we've taken too long
+        if (toc(tStart) > maxDuration)
+            disp('Took too long to run');
+            return;
+        end
+      
+        % update distance from odometry
+        recentDist= DistanceSensorRoomba(serPort);
+        distSansBump= distSansBump+recentDist;
+        if (hitFirstWall)
+            totalDist = totalDist+recentDist;
+        end
+        
+        % check position and see how far we are from start
         [xCur, yCur, ~]= OverheadLocalizationCreate(serPort);
         distFromStart= pdist([xStart, yStart; xCur, yCur], 'euclidean');
-        
-        fprintf('x %d, y %d, dist %d\n', xStart, yStart, distFromStart);
-        
-        % Consider back at start if kind of close
-        backAtStart= distFromStart < 0.1; 
+        fprintf('(%d, %d)\tdist %d\n', xCur, yCur, distFromStart);
 
+        % if we've traveled far enough, check if we're back at start
+        if totalDist > minDist
+            backAtStart = distFromStart < distCushion; 
+        end
+        
+        % check for and react to bump sensor readings
+        bumped= checkForBumpAndTurn(serPort);
+        
+        % if obstacle was hit, arc to follow wall
+        if bumped
+            
+            % mark start position if this is first bump
+            if (~hitFirstWall)
+                hitFirstWall= true;
+                [xStart, yStart, ~]= OverheadLocalizationCreate(serPort);                
+            end
+            
+            % reset distance because during the bump motion we never travel
+            DistanceSensorRoomba(serPort);
+            distSansBump = 0;
+            
+            % follow the wall edge by arcing
+            SetFwdVelAngVelCreate(serPort, w2v(defaultArc), defaultArc);
+        end
+        
+        % pause to let the robot run
+        pause(0.1);
+    end
+    
+    % stop robot motion
+    SetFwdVelAngVelCreate(serPort, 0, 0);
+    
+    disp('Completed followWallEdge');
+end
+
+function bumped= checkForBumpAndTurn(serPort)
+% Check bump sensors and steer the robot away from obstacles if necessary.
+%
+% Input:
+% serPort - Serial port object, used for communicating over bluetooth
+%
+% Output:
+% bumped - Boolean, true if bump sensor is activated
+
+    % Check bump sensors (ignore wheel drop sensors)
+    [BumpRight, BumpLeft, ~, ~, ~, BumpFront] ...
+         = BumpsWheelDropsSensorsRoomba(serPort);
+
+    bumped= BumpRight || BumpLeft || BumpFront;
+
+    % Turn counter-clockwise if bumped
+    if BumpRight
+        turnRadians(serPort, pi/8);
+    elseif BumpLeft
+        turnRadians(serPort, pi/2 + pi/8);
+    elseif BumpFront
+        turnRadians(serPort, pi/4);
     end
     
 end
 
-function [BumpRight, BumpLeft, BumpFront]= continueToWall(serPort)
+function turnRadians(serPort, angToTurn)
+% Turn Create with maximum angular velocity and no linear velocity.
+%
+% Input:
+% serPort - Serial port for communicating with robot
+% angToTurn - Angle to turn (rad)
 
-    maxDuration= 120; % bail after 2 mins
-    tStart= tic;   
+    % start turning at max speed
+    SetFwdVelAngVelCreate(serPort, 0, v2w(0));
 
-    while toc(tStart) < maxDuration
-        
-        % check to see if we bumped anything
-        [BumpRight, BumpLeft, ~, ~, ~, BumpFront] ...
-            = BumpsWheelDropsSensorsRoomba(serPort);
-        
-        % if we hit a wall, all done
-        if (BumpRight || BumpLeft || BumpFront)
-            return
-        end
-
-        % pause to let the robot move
+    % reset angle sensor
+    AngleSensorRoomba(serPort)
+    
+    % loop until turn complete
+    angTurned= 0;
+    while angTurned < angToTurn
+        angTurned= angTurned + abs(AngleSensorRoomba(serPort));
         pause(0.1)
-        
     end
-        
+end
+
+function w= v2w(v)
+% Calculate the max allowable angular velocity from the linear velocity.
+%
+% Input:
+% v - Forward velocity of Create (m/s)
+%
+% Output:
+% w - Angular velocity of Create (rad/s)
+    
+    % robot constants
+    maxWheelVel= 0.5;   % max linear velocity of each drive wheel (m/s)
+    robotRadius= 0.2;   % radius of the robot (m)
+    
+    % max velocity combinations obey rule v+wr <= v_max
+    w= (maxWheelVel-v)/robotRadius;
+end
+
+function v= w2v(w)
+% Calculate the max allowable linear velocity from the angular velocity.
+%
+% Input:
+% w - Angular velocity of Create (rad/s)
+%
+% Output:
+% v - Linear velocity of Create (m/s)
+    
+    % robot constants
+    maxWheelVel= 0.5;   % max linear velocity of each drive wheel (m/s)
+    robotRadius= 0.2;   % radius of the robot (m)
+    
+    % max velocity combinations obey rule v+wr <= v_max
+    v = maxWheelVel - (robotRadius * abs(w)) - .05;
 end
