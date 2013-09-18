@@ -8,9 +8,9 @@ function followWallEdge(serPort)
     disp('Starting followWallEdge');
 
     % constants
-    maxDuration= 1200;  % max time to allow the program to run (s)
+    maxDuration= 120;   % max time to allow the program to run (s)
     maxDistSansBump= 5; % max distance to travel without obstacles (m)
-    maxFwdVel= 0.5;     % max allowable forward velocity (m/s)
+    maxFwdVel= 0.4;     % max allowable forward velocity (m/s)
     defaultArc = -.8;   % default angular arc, represents how closely 
                         % it follows the walls (bigger means tighter)
     minDist = 1;        % distance you must travel before can check if back
@@ -25,9 +25,14 @@ function followWallEdge(serPort)
     hitFirstWall= 0;    % true after we hit a wall for the first time
     xStart = 0;         % x-coord where we start circumnavigation
     yStart = 0;         % y-coord where we start circumnavigation
+    ang = 0;            % current orientation of robot (rad)
+    
+    % reset sensors
+    DistanceSensorRoomba(serPort);
+    AngleSensorRoomba(serPort);
     
     % start robot moving
-    SetFwdVelAngVelCreate(serPort, maxFwdVel, 0)
+    SetFwdVelAngVelCreate(serPort, maxFwdVel, inf);
     
     % loop until we've circumnavigated
     while ~backAtStart
