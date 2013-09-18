@@ -4,6 +4,9 @@
 # OSX / *nix default autosave extension
 *.m~
 
+# OSX store file
+*.DS_Store
+
 # Compiled MEX binaries (all platforms)
 *.mex*
 
