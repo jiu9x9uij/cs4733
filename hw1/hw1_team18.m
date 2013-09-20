@@ -1,4 +1,8 @@
-function followWallEdge(serPort)
+% HW1 - Team 18
+% Alden Quimby - adq2101
+% Matthew Dean - mtd2121
+
+function hw1_team18(serPort)
 % Drives forward until a wall is found, then circumnavigates the wall 
 % counter-clockwise by using the bump sensors.
 %
