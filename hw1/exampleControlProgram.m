@@ -151,4 +151,5 @@ function w= v2w(v)
     
     % Max velocity combinations obey rule v+wr <= v_max
     w= (maxWheelVel-v)/robotRadius;
+    disp(w);
 end

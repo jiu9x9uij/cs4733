@@ -15,11 +15,12 @@ function hw1_team18(serPort)
     maxDuration= 120;   % max time to allow the program to run (s)
     maxDistSansBump= 5; % max distance to travel without obstacles (m)
     maxFwdVel= 0.4;     % max allowable forward velocity (m/s)
-    defaultArc = -.8;   % default angular arc, represents how closely 
+    defaultArc = .1;   % default angular arc, represents how closely 
                         % it follows the walls (bigger means tighter)
     minDist = 1;        % distance you must travel before can check if back
                         % in starting position
     distCushion = .2;   % how close you have to be to the starting
+    slowTurnSpeed = .35; % rads per second
     
     % initialize loop variables
     tStart= tic;        % time limit marker
@@ -38,7 +39,7 @@ function hw1_team18(serPort)
     AngleSensorRoomba(serPort);
     
     % start robot moving
-    SetFwdVelAngVelCreate(serPort, maxFwdVel, inf);
+    SetFwdVelAngVelCreate(serPort, maxFwdVel, 0);
     
     % loop until we've circumnavigated
     while ~backAtStart
@@ -55,22 +56,27 @@ function hw1_team18(serPort)
             return;
         end
       
-        % update distance from odometry
-        recentDist= DistanceSensorRoomba(serPort);
+        % READ ALL DEM SENSORS
+        %[~, ~, ~, wall, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, recentDist, recentAng, ~, ~, ~, ~, ~, ~] ...
+        %    = AllSensorsReadRoomba(serPort);
+        
+        wallCheckReact(serPort);
+        recentDist = 0;
+        totalDist = 0;
         distSansBump= distSansBump+recentDist;
         if (hitFirstWall)
             totalDist = totalDist+recentDist;
         end
         
         % update angle
-        recentAng = AngleSensorRoomba(serPort);
         ang = mod(ang + recentAng, 2*pi);
         
         % check position and see how far we are from start
         xCur = xCur + recentDist * cos(ang);
         yCur = yCur + recentDist * sin(ang);
         distFromStart= pdist([xStart, yStart; xCur, yCur], 'euclidean');
-        fprintf('(%d, %d)\tdist %d\n', xCur, yCur, distFromStart);
+        fprintf('pos: (%.3f, %.3f), ang: %.3f \n', xCur, yCur, ang * (180/pi));
+        
 
         % if we've traveled far enough, check if we're back at start
         if totalDist > minDist
@@ -83,12 +89,13 @@ function hw1_team18(serPort)
         % if obstacle was hit, turn then arc to follow wall
         if angToTurn ~= 0
             
-            % stop robot
-            SetFwdVelAngVelCreate(serPort, 0, inf);
+            % stop robot, i changed it to 0,0 because it threw errors
+            % before when it said inf
+            SetFwdVelAngVelCreate(serPort, 0, 0);
             
             % turn the robot
-            turnRadians(serPort, angToTurn);
-            ang = mod(ang + angToTurn, 2*pi);
+            actualAng = turnRadians(serPort, angToTurn, slowTurnSpeed);
+            ang = mod(ang + actualAng, 2*pi);
             
             % mark start position if this is first bump
             if (~hitFirstWall)
@@ -106,7 +113,7 @@ function hw1_team18(serPort)
         end
         
         % pause to let the robot run
-        pause(0.1);
+        pause(0.01);
     end
     
     % stop robot motion
@@ -114,6 +121,17 @@ function hw1_team18(serPort)
     
     disp('Completed followWallEdge');
 end
+%wtf this doesn't work WTF
+function wallCheckReact(serPort)
+    Wall = 0;
+    [BumpRight, BumpLeft, BumpFront, Wall, virtWall, CliffLft, ... 
+        CliffRgt, CliffFrntLft, CliffFrntRgt, LeftCurrOver, RightCurrOver, ...
+        DirtL, DirtR, ButtonPlay, ButtonAdv, Dist, Angle, ...
+        Volts, Current, Temp, Charge, Capacity, pCharge] = AllSensorsReadRoomba(serPort);
+    fprintf('The value is %d',Wall);
+end
+
+
 
 function angToTurn= checkForBump(serPort)
 % Check bump sensors and steer the robot away from obstacles if necessary.
@@ -130,26 +148,29 @@ function angToTurn= checkForBump(serPort)
 
     % Turn counter-clockwise if bumped
     if BumpRight
-        angToTurn = pi/8;
+        %angToTurn = pi/8;
+        angToTurn = pi;
     elseif BumpLeft
-        angToTurn = pi/2 + pi/8;
+        %angToTurn = pi/2 + pi/8;
+        angToTurn = pi;
     elseif BumpFront
-        angToTurn = pi/4;
+        %angToTurn = pi/4;
+        angToTurn = pi;
     else
         angToTurn = 0;
+    
     end
     
 end
 
-function turnRadians(serPort, angToTurn)
+function angTurned = turnRadians(serPort, angToTurn, slowTurnSpeed)
 % Turn Create with maximum angular velocity and no linear velocity.
 %
 % Input:
 % serPort - Serial port for communicating with robot
 % angToTurn - Angle to turn (rad)
 
-    % start turning at max speed
-    SetFwdVelAngVelCreate(serPort, 0, v2w(0));
+    
 
     % reset angle sensor
     AngleSensorRoomba(serPort);
@@ -157,12 +178,16 @@ function turnRadians(serPort, angToTurn)
     % loop until turn complete
     angTurned= 0;
     while angTurned < angToTurn
+        pause(0.01)
+        % start turning at speed given in constants section
+        SetFwdVelAngVelCreate(serPort, 0, slowTurnSpeed);
         angTurned= angTurned + abs(AngleSensorRoomba(serPort));
-        pause(0.1)
     end
+    SetFwdVelAngVelCreate(serPort, 0, 0);
     
+    pause(0.2);
     % reset angle sesor
-    AngleSensorRoomba(serPort);
+    angTurned = angTurned + abs(AngleSensorRoomba(serPort));
 end
 
 function w= v2w(v)
