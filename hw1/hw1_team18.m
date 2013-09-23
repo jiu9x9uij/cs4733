@@ -12,13 +12,16 @@ function hw1_team18(serPort)
     disp('Starting followWallEdge');
 
     % constants
-    maxDuration= 120;   % max time to allow the program to run (s)
+    maxDuration= 300;   % max time to allow the program to run (s)
     maxDistSansBump= 5; % max distance to travel without obstacles (m)
     maxFwdVel= 0.4;     % max allowable forward velocity (m/s)
-    defaultArc = .1;   % default angular arc, represents how closely 
+    wallFwdVel = 0.1;   % follow that wall tight man
+    bumpFwdVel = 0.3;
+    wallAngle = -0.1;    % approx 7 degrees, trying to hug it tight
                         % it follows the walls (bigger means tighter)
     minDist = 1;        % distance you must travel before can check if back
                         % in starting position
+    postBumpDist = .1;  % after you bump, travel for a sec
     distCushion = .2;   % how close you have to be to the starting
     slowTurnSpeed = .35; % rads per second
     
@@ -34,7 +37,7 @@ function hw1_team18(serPort)
     yCur = 0;           % current y-coord
     ang = 0;            % current orientation of robot (rad)
     
-    % reset sensors
+    % reset sensors so start is (0,0)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
     
@@ -43,6 +46,8 @@ function hw1_team18(serPort)
     
     % loop until we've circumnavigated
     while ~backAtStart
+        % pause to let the robot run
+        pause(0.05);
         
         % bail if we've gone too far without a wall
         if (distSansBump > maxDistSansBump)
@@ -54,11 +59,6 @@ function hw1_team18(serPort)
         if (toc(tStart) > maxDuration)
             disp('Took too long to run');
             return;
-        end
-      
-        wall_sensor = WallSensorReadRoomba(serPort);
-        if wall_sensor == 1
-            disp('********** WALL SENSOR IS 1 **********\n');
         end
         
         recentDist= DistanceSensorRoomba(serPort);
@@ -109,15 +109,46 @@ function hw1_team18(serPort)
             distSansBump = 0;
             
             % follow the wall edge by arcing
-            SetFwdVelAngVelCreate(serPort, w2v(defaultArc), defaultArc);
+            % this is our moment to set default pattern
+            SetFwdVelAngVelCreate(serPort, wallFwdVel, 0);
+        elseif hitFirstWall && distSansBump > postBumpDist
+           % we did not bump a wall, so listen to the wall sensor 
+            wall_sensor = WallSensorReadRoomba(serPort);
+            if wall_sensor == 1
+                disp('********** We is good **********');
+                distSansWall = 0;
+                SetFwdVelAngVelCreate(serPort, bumpFwdVel, 0);
+            else
+                % stop
+                SetFwdVelAngVelCreate(serPort, 0, 0);
+                % turn a small angle
+                actualAng = turnRadians(serPort, wallAngle, -slowTurnSpeed);
+                % handle odometry
+                ang = mod(ang + actualAng, 2*pi);
+                % start driving again
+                SetFwdVelAngVelCreate(serPort, bumpFwdVel, 0);
+            end
+           
         end
         
-        % pause to let the robot run
-        pause(0.01);
+        
     end
     
     % stop robot motion
     SetFwdVelAngVelCreate(serPort, 0, 0);
+    
+    %GO TO (0,0)!!!
+    %turn to face 0,0, go correct distance, stop
+    
+    %helper theta angle
+    littleGuy = atan(yCur/xCur);
+    %calculate what we need to turn
+    compensateAng = pi + littleGuy - ang;
+    %do the turning
+    turnRadians(serPort, compensateAng, slowTurnSpeed);
+    % how far are we from legit origin
+    distFromStart= pdist([0, 0; xCur, yCur], 'euclidean');
+    travelDist(serPort, maxFwdVel, distFromStart);
     
     disp('Completed followWallEdge');
 end
@@ -159,21 +190,19 @@ function angTurned = turnRadians(serPort, angToTurn, slowTurnSpeed)
 % angToTurn - Angle to turn (rad)
 
     % reset angle sensor
-    AngleSensorRoomba(serPort);
-    
+    angTurned = AngleSensorRoomba(serPort);
+    SetFwdVelAngVelCreate(serPort, 0, slowTurnSpeed);
     % loop until turn complete
-    angTurned= 0;
-    while angTurned < angToTurn
+    while abs(angTurned) < abs(angToTurn)
         pause(0.01)
         % start turning at speed given in constants section
-        SetFwdVelAngVelCreate(serPort, 0, slowTurnSpeed);
-        angTurned= angTurned + abs(AngleSensorRoomba(serPort));
+        angTurned= angTurned + AngleSensorRoomba(serPort);
     end
     SetFwdVelAngVelCreate(serPort, 0, 0);
     
     pause(0.2);
     % reset angle sesor
-    angTurned = angTurned + abs(AngleSensorRoomba(serPort));
+    angTurned = angTurned + AngleSensorRoomba(serPort);
 end
 
 function w= v2w(v)
