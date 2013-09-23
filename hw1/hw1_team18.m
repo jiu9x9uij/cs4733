@@ -56,19 +56,19 @@ function hw1_team18(serPort)
             return;
         end
       
-        % READ ALL DEM SENSORS
-        %[~, ~, ~, wall, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, recentDist, recentAng, ~, ~, ~, ~, ~, ~] ...
-        %    = AllSensorsReadRoomba(serPort);
+        wall_sensor = WallSensorReadRoomba(serPort);
+        if wall_sensor == 1
+            disp('********** WALL SENSOR IS 1 **********\n');
+        end
         
-        wallCheckReact(serPort);
-        recentDist = 0;
-        totalDist = 0;
+        recentDist= DistanceSensorRoomba(serPort);
         distSansBump= distSansBump+recentDist;
         if (hitFirstWall)
             totalDist = totalDist+recentDist;
         end
         
         % update angle
+        recentAng = AngleSensorRoomba(serPort);
         ang = mod(ang + recentAng, 2*pi);
         
         % check position and see how far we are from start
@@ -121,17 +121,6 @@ function hw1_team18(serPort)
     
     disp('Completed followWallEdge');
 end
-%wtf this doesn't work WTF
-function wallCheckReact(serPort)
-    Wall = 0;
-    [BumpRight, BumpLeft, BumpFront, Wall, virtWall, CliffLft, ... 
-        CliffRgt, CliffFrntLft, CliffFrntRgt, LeftCurrOver, RightCurrOver, ...
-        DirtL, DirtR, ButtonPlay, ButtonAdv, Dist, Angle, ...
-        Volts, Current, Temp, Charge, Capacity, pCharge] = AllSensorsReadRoomba(serPort);
-    fprintf('The value is %d',Wall);
-end
-
-
 
 function angToTurn= checkForBump(serPort)
 % Check bump sensors and steer the robot away from obstacles if necessary.
@@ -148,17 +137,16 @@ function angToTurn= checkForBump(serPort)
 
     % Turn counter-clockwise if bumped
     if BumpRight
-        %angToTurn = pi/8;
-        angToTurn = pi;
+        angToTurn = pi/8;
+        %angToTurn = pi;
     elseif BumpLeft
-        %angToTurn = pi/2 + pi/8;
-        angToTurn = pi;
+        angToTurn = pi/2 + pi/8;
+        %angToTurn = pi;
     elseif BumpFront
-        %angToTurn = pi/4;
-        angToTurn = pi;
+        angToTurn = pi/4;
+        %angToTurn = pi;
     else
         angToTurn = 0;
-    
     end
     
 end
@@ -169,8 +157,6 @@ function angTurned = turnRadians(serPort, angToTurn, slowTurnSpeed)
 % Input:
 % serPort - Serial port for communicating with robot
 % angToTurn - Angle to turn (rad)
-
-    
 
     % reset angle sensor
     AngleSensorRoomba(serPort);
