@@ -75,57 +75,51 @@ function hw1_team18(serPort)
             % if obstacle was hit, turn then arc to follow wall
             if angToTurn ~= 0
 
-                % stop robot, i changed it to 0,0 because it threw errors
-                % before when it said inf
-                SetFwdVelAngVelCreate(serPort, 0, 0);
-
-                % turn the robot
-                actualAng = turnRadians(serPort, angToTurn, slowTurnSpeed);
-                ang = mod(ang + actualAng, 2*pi);
-
+                % back up a little
+                travelDist(serPort, maxFwdVel, -distIncr/2);
+                
+                % update odometry double because it thinks it's farther
+                % than it is
+                xCur = xCur - distIncr * cos(ang);
+                yCur = yCur - distIncr * sin(ang);
+                
                 % mark start position if this is first bump
                 if (~hitFirstWall)
                     hitFirstWall= true;
                     xStart = xCur;
                     yStart = yCur;
                 end
+                
+                % execute the turn
+                turnAngle(serPort, slowTurnSpeed, angToTurn);
+                
+                % update odometry
+                ang = mod(ang + angToTurn, 2*pi);
 
-                % reset distance because during the bump motion we never travel
-                DistanceSensorRoomba(serPort);
+                % reset distance
                 distSansBump = 0;
-
-                % follow the wall edge by arcing
-                % this is our moment to set default pattern
-                SetFwdVelAngVelCreate(serPort, wallFwdVel, 0);
 
             else
                 % go a step forward
                 travelDist(serPort, maxFwdVel, distIncr);
+                distSansBump= distSansBump+distIncr;
                 
+                % update odometry
+                xCur = xCur + distIncr * cos(ang);
+                yCur = yCur + distIncr * sin(ang);
                 
                 % turn a little if we're in wall following
                 if (hitFirstWall)
+                    totalDist = totalDist+distIncr;
+                    
                     turnAngle(serPort, slowTurnSpeed, angleIncr);
+                    
+                    ang = mod(ang + angleIncr, 2*pi);
                 end
-                
-                
                 
             end
             
-            recentDist= DistanceSensorRoomba(serPort);
-            distSansBump= distSansBump+recentDist;
-            distSansWall= distSansWall+recentDist;
-            if (hitFirstWall)
-                totalDist = totalDist+recentDist;
-            end
-
-            % update angle
-            recentAng = AngleSensorRoomba(serPort);
-            ang = mod(ang + recentAng, 2*pi);
-
             % check position and see how far we are from start
-            xCur = xCur + recentDist * cos(ang);
-            yCur = yCur + recentDist * sin(ang);
             distFromStart= pdist([xStart, yStart; xCur, yCur], 'euclidean');
             fprintf('pos: (%.3f, %.3f), ang: %.3f\n', xCur, yCur, ang * (180/pi));
 
@@ -134,19 +128,25 @@ function hw1_team18(serPort)
                 backAtStart = distFromStart < distCushion(toc(tStart)); 
             end
 
-recentDist= DistanceSensorRoomba(serPort);
-            distSansBump= distSansBump+recentDist;
-            distSansWall= distSansWall+recentDist;
-            if (hitFirstWall)
-                totalDist = totalDist+recentDist;
-            end
-
-            % update angle
-            recentAng = AngleSensorRoomba(serPort);
-            ang = mod(ang + recentAng, 2*pi);
-
-
         end
+        
+        %GO TO (0,0)!!!
+        %turn to face 0,0, go correct distance, stop
+
+        %helper theta angle
+        littleGuy = atan(yCur/xCur);
+        %calculate what we need to turn
+        compensateAng = pi + littleGuy - ang;
+        %do the turning
+        turnAngle(serPort, slowTurnSpeed, compensateAng);
+        ang = mod(ang + compensateAng, 2*pi);
+        % how far are we from legit origin
+        distFromStart= pdist([0, 0; xCur, yCur], 'euclidean');
+        travelDist(serPort, maxFwdVel, distFromStart);
+        turnAngle(serPort, slowTurnSpeed, -ang);
+
+        disp('Completed followWallEdge');
+        
     end
 
     function followWallSimulator
