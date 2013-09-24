@@ -53,6 +53,8 @@ function hw1_team18(serPort)
                               % scale back angle commands
         bumpAng = 45;         % angle to turn after bumping (deg)
         bumpAngM = 0.81;      % special scale back for bump turning
+        bumpAngCorrect = 10;  % after bumping, we probably skidded, so
+                              % correct the angle it thinks it's at
         
         % loop until we've circumnavigated
         while ~backAtStart
@@ -124,6 +126,10 @@ function hw1_team18(serPort)
                 % reset distance
                 distSansBump = 0;
                 
+                % correct angle because we probably skiddedgit st
+                
+                ang = mod(ang - bumpAngCorrect, 360);
+                
             elseif (hitFirstWall)    
                 % turn a little if we're in wall following
 
@@ -147,6 +153,7 @@ function hw1_team18(serPort)
         end
         
         % now go back to start
+        disp('returning to origin');
 
         % calculate what we need to turn to face (0,0)
         compensateAng = 180 + atand(yCur/xCur) - ang;
@@ -260,7 +267,6 @@ function hw1_team18(serPort)
                % we did not bump a wall, so listen to the wall sensor 
                 wall_sensor = WallSensorReadRoomba(serPort);
                 if wall_sensor == 1
-                    disp('********** We see wall **********');
                     distSansWall = 0;
                     SetFwdVelAngVelCreate(serPort, wallFwdVel, 0);
                 else
@@ -283,6 +289,7 @@ function hw1_team18(serPort)
         SetFwdVelAngVelCreate(serPort, 0, 0);
 
         % now go back to start
+        disp('returning to origin');
 
         % calculate what we need to turn to face (0,0)
         compensateAng = pi + atan(yCur/xCur) - ang;
@@ -314,7 +321,7 @@ function dist = distCushion(duration)
 % Output:
 % dist - How far from start you can be to be considered "back"
 
-    dist= 0.2 + (duration/60)*0.1;
+    dist= 0.25 + (duration/60)*0.1;
 end
 
 function angToTurn= checkForBump(serPort)
