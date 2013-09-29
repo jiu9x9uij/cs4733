@@ -17,8 +17,8 @@ function hw2_team18(serPort)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
 
-    % set goal is straight in front, angle irrelevant
-    qGoal = [5,0];        
+    % set goal 10m straight in front, angle irrelevant
+    qGoal = [2,0];        
     
     % loop variables
     tStart = tic;       % time limit marker
@@ -194,7 +194,7 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
     while (~isAtGoal && ~isCloserOnMLine)
 
         % pause to let the robot run
-        pause(0.05);
+        pause(0.075);
         
         % bail if we've taken too long
         if (toc(tStart) > maxDuration)
@@ -250,7 +250,7 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
             SetFwdVelAngVelCreate(serPort, wallFwdVel, 0);
             
             % check if we're on the M Line
-            if (onLine(qLeave, qHit, qGoal))
+            if (onLine(qLeave, [0,0], qGoal)) 
 
                 disp('On M Line');
 
@@ -296,6 +296,8 @@ function isOnLine = onLine(pos, qStart, qGoal)
 % Output:
 % isOnLine - True if current position on line from start to goal
 
+    % TODO-MATT use a thick line
+
     % constants
     allowableSlopeDiff = 0.05;
 
@@ -319,7 +321,7 @@ function isAtPoint = atPoint(pos, qGoal, duration)
 % Output:
 % isAtPoint - True if robot is considered at goal
 
-    distCushion = 0.25 + (duration/60)*0.1;
+    distCushion = 0.2 + (duration/60)*0.1;
     dist = pdist([pos(1), pos(2); qGoal(1), qGoal(2)], 'euclidean'); 
     isAtPoint = dist < distCushion; 
     
@@ -401,10 +403,19 @@ end
 
 function printPosition(pos)
 % Displays x,y,theta position in readible format.
+% Also plots the position in blue and orientation in green.
 %
 % Input:
 % pos - Position to display
 
     fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+    
+    % plot position
+    plot(pos(1), pos(2), 'b.');
+    
+    % plot orientation
+    dispOrientation = 0.25;
+    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
+         [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
 
 end
