@@ -29,19 +29,56 @@ function hw2_team18(serPort)
     % while we aren't at the goal, follow M until wall, circle wall, repeat
     while (~isAtGoal && ~failed)
     
+        % turn to face the goal point
+        pos(3) = turnToFacePoint(serPort, pos, qGoal);
+        
         % go until we hit a wall or the goal
         [pos, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
-                                                       qGoal, tStart);
+                                                    qGoal, tStart);
         
         % if not done, follow wall until back on M Line or at goal
         if (~isAtGoal && ~failed)
             [pos, isAtGoal, failed] = followWall(serPort, pos,...
-                                                    qGoal, tStart);
+                                                 qGoal, tStart);
         end
         
     end
     
     disp('Completed bug2');
+    
+end
+
+function newAng = turnToFacePoint(serPort, pos, qGoal)
+% Turn in place to face goal.
+%
+% Input:
+% serPort - Serial port for communicating with robot
+% pos - Current position of robot (x, y, theta)
+% qGoal - Goal position (x, y)
+%
+% Output:
+% newAng - Angle of robot after completing turn
+
+    disp('Starting turnToFacePoint');
+
+    % calculate what we need to turn
+    compensateAng = atan((pos(2)-qGoal(2))/(pos(1)-qGoal(1))) - pos(3);
+        
+    % if we're to the right of the goal, turn an extra 180
+    if (pos(1) >= qGoal(1))
+    	compensateAng = compensateAng+pi;
+    end
+    
+    % if we're at the goal, inverse tan will fail, so manually set to 0
+    if (pos(1) == qGoal(1) && pos(2) == qGoal(2))
+        compensateAng = 0;
+    end
+    
+    % do the turn and update the angle
+    actualTurn = turnRadians(serPort, compensateAng);
+    newAng = mod(pos(3) + actualTurn, 2*pi);
+
+    disp('Completed turnToFacePoint');
     
 end
 
@@ -64,8 +101,7 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
     
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
-    maxDistSansBump = 5; % max distance to travel without obstacles (m)
-    maxFwdVel = 0.4;      % max allowable forward velocity (m/s)
+    maxFwdVel = 0.4;     % max allowable forward velocity (m/s)
 
     % reset sensors for odomentry
     DistanceSensorRoomba(serPort);
@@ -73,26 +109,17 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
 
     % loop variables
     isAtGoal = atPoint(pos, qGoal, toc(tStart));
-    angToTurn = 0;
-    distSansBump = 0;
-    qHit = pos; 
-    failed = 0;
+    bumpedWall = 0;
+    qHit = pos;
 
     % start robot moving
     SetFwdVelAngVelCreate(serPort, maxFwdVel, 0);
 
     % loop until we're at the goal or we've bumped
-    while (~isAtGoal && angToTurn == 0)
+    while (~isAtGoal && ~bumpedWall)
 
         % pause to let the robot run
         pause(0.05);
-
-        % bail if we've gone too far without a wall
-        if (distSansBump > maxDistSansBump)
-            disp('Failed to find a wall');
-            failed = 1;
-            return;
-        end
 
         % bail if we've taken too long
         if (toc(tStart) > maxDuration)
@@ -103,39 +130,26 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
 
         % update position
         recentDist = DistanceSensorRoomba(serPort);
-        distSansBump = distSansBump + recentDist;
-        pos(1) = pos(1) + recentDist * cos(pos(3));
-        pos(2) = pos(2) + recentDist * sin(pos(3));
-
-        % print position
-        fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+        qHit(1) = qHit(1) + recentDist * cos(qHit(3));
+        qHit(2) = qHit(2) + recentDist * sin(qHit(3));
+        printPosition(qHit);
 
         % check if we've reached the goal
-        isAtGoal = atPoint(pos, qGoal, toc(tStart));
+        isAtGoal = atPoint(qHit, qGoal, toc(tStart));
         
         % check for wall
-        angToTurn = checkForBump(serPort);
+        bumpedWall = checkForBump(serPort) ~= 0;
 
     end
 
     % stop robot motion
     SetFwdVelAngVelCreate(serPort, 0, 0);
 
-    % if obstacle was hit, perform turn
-    if (angToTurn ~= 0)
-
-        % turn the robot
-        actualAng = turnRadians(serPort, angToTurn);
-        pos(3) = mod(pos(3) + actualAng, 2*pi);
-        
-        % reset distance because during the bump motion we never travel
-        DistanceSensorRoomba(serPort);
-
-        % set hit position
-        qHit = pos;
-        
-    end
-
+    % no need to update position again here, tested it and doesn't change
+    
+    % succeeded!
+    failed = 0; 
+    
     disp('Completed driveToWallOrGoal');
     
 end
@@ -163,26 +177,21 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
     bumpFwdVel = 0.1;    % velocity after bump (m/s)
     wallFwdVel = 0.3;    % velocity when using wall sensor (m/s)
     wallAngle = -0.1;    % 7 degrees, amount to turn when wall sensing
-    minDist = 0.1;       % min dist to travel
+    postBumpDist = 0.1;  % min dist to travel after bump (m)
+    distCorrect = 0.02;  % correction when inching forward (m)
     
     % loop variables
-    isOnMLine = 0;      % true when back on M Line
-    isAtGoal = 0;       % true if we reach the goal
-    dist = 0;           % dist traveled (m)
-    pos = qHit;
-    qLeave = pos;
-    failed = 0;
-    initDistToGoal = pdist([pos(1),pos(2);qGoal(1),qGoal(2)],'euclidean');
+    isCloserOnMLine = 0; % true when back on M Line
+    isAtGoal = 0;        % true if we reach the goal
+    distSansBump = 0;    % dist traveled (m)
+    qLeave = qHit;       % leave point when we finish (x, y, theta)
+    
+    % figure out how far we are from goal now
+    initDistToGoal = pdist([qLeave(1),qLeave(2);qGoal(1),qGoal(2)],...
+                           'euclidean');
 
-    % reset sensors
-    DistanceSensorRoomba(serPort);
-    AngleSensorRoomba(serPort);
-
-    % start robot moving
-    SetFwdVelAngVelCreate(serPort, bumpFwdVel, 0);
-
-    % loop until we've circumnavigated
-    while (~isAtGoal && ~isOnMLine)
+    % loop until we're at the goal or back on M Line
+    while (~isAtGoal && ~isCloserOnMLine)
 
         % pause to let the robot run
         pause(0.05);
@@ -194,107 +203,89 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
             return;
         end
 
-        % update distance
+        % update distance and position
         recentDist = DistanceSensorRoomba(serPort);
-        dist = dist + recentDist;
-
+        distSansBump = distSansBump + recentDist;
+        qLeave(1) = qLeave(1) + recentDist * cos(qLeave(3));
+        qLeave(2) = qLeave(2) + recentDist * sin(qLeave(3));
+        printPosition(qLeave);
+        
         % update angle
         recentAng = AngleSensorRoomba(serPort);
-        pos(3) = mod(pos(3) + recentAng, 2*pi);
+        qLeave(3) = mod(qLeave(3) + recentAng, 2*pi);
 
-        % update position
-        pos(1) = pos(1) + recentDist * cos(pos(3));
-        pos(2) = pos(2) + recentDist * sin(pos(3));
+        % check for bump
+        angToTurn = checkForBump(serPort);
 
-        % print position
-        fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+        % if obstacle was hit, turn and go slow
+        if angToTurn ~= 0
 
-        % check if we've reached the goal
-        isAtGoal = atPoint(pos, qGoal, toc(tStart));
-        
-        if (~isAtGoal && dist > minDist)
+            % turn the robot
+            actualAng = turnRadians(serPort, angToTurn);
+            qLeave(3) = mod(qLeave(3) + actualAng, 2*pi);
 
-            % check for M Line
-            isOnMLine = backOnLine(pos, qHit, qGoal);
-            
-            % only count it if we're closer to goal
-            if (isOnMLine)
-                toGoal = pdist([pos(1),pos(2);qGoal(1),qGoal(2)],'euclidean');
-                isOnMLine = toGoal < initDistToGoal;
-                
-                % if we're back at the start, we're trapped
-                if (atPoint(pos, qHit, toc(tStart)))
-                    disp('circumnavigated wall');
-                    failed = 1;
-                    return;
-                end
-            end
-            
+            % reset distance because during the bump motion we never travel
+            % DistanceSensorRoomba(serPort);
+            distSansBump = 0;
+
+            % drive forward slowly
+            SetFwdVelAngVelCreate(serPort, bumpFwdVel, 0);
+
+        % otherwise if we've gone far enough
+        elseif distSansBump > postBumpDist
+
             % follow wall using IR sensor
             if (WallSensorReadRoomba(serPort) == 0)
-                % stop
-                SetFwdVelAngVelCreate(serPort, 0, 0);
                 % turn a small angle
                 actualAng = turnRadians(serPort, wallAngle);
-                % handle odometry
-                pos(3) = mod(pos(3) + actualAng, 2*pi);
+                qLeave(3) = mod(qLeave(3) + actualAng, 2*pi);
+                
+                % bug in simulator doesn't update position, manually add
+                distSansBump = distSansBump + distCorrect;
+                qLeave(1) = qLeave(1) + distCorrect * cos(qLeave(3));
+                qLeave(2) = qLeave(2) + distCorrect * sin(qLeave(3));
             end
 
             % drive forward
             SetFwdVelAngVelCreate(serPort, wallFwdVel, 0);
             
+            % check if we're on the M Line
+            if (onLine(qLeave, qHit, qGoal))
+
+                disp('On M Line');
+
+                % check if we're closer to the goal
+                toGoal = pdist([qLeave(1),qLeave(2);qGoal(1),qGoal(2)],...
+                               'euclidean');
+                isCloserOnMLine = toGoal < initDistToGoal;
+
+                % if we're back at the start, we're trapped
+                if (atPoint(qLeave, qHit, toc(tStart)))
+                    disp('circumnavigated wall, trapped');
+                    failed = 1;
+                    return;
+                end
+
+            end
+                    
         end
+        
+        % check if we've reached the goal
+        isAtGoal = atPoint(qLeave, qGoal, toc(tStart));
         
     end
 
     % stop robot motion
     SetFwdVelAngVelCreate(serPort, 0, 0);
 
-    % turn to face goal
-    pos(3) = turnToFacePoint(serPort, pos, qGoal);
-    
-    % set leave point
-    qLeave = pos;
-    
+    % succeeded!
+    failed = 0;
+
     disp('Completed followWall');
 
 end
 
-function newAng = turnToFacePoint(serPort, pos, qGoal)
-% Turn in place to face goal.
-%
-% Input:
-% serPort - Serial port for communicating with robot
-% pos - Current position of robot (x, y, theta)
-% qGoal - Goal position (x, y)
-%
-% Output:
-% newAng - Angle of robot after completing turn
-
-    disp('Starting turnToFacePoint');
-
-    % calculate what we need to turn
-    compensateAng = pi+atan((pos(2)-qGoal(2))/(pos(1)-qGoal(1)))-pos(3);
-    
-    if (pos(1) > qGoal(1))
-        compensateAng = compensateAng - pos(3);
-    else
-        compensateAng = compensateAng + pos(3);
-    end
-    
-    fprintf('Turning: %.3f\n', compensateAng*(180/pi));
-    
-    % do the turn
-    actualTurn = turnRadians(serPort, compensateAng);
-    
-    % update the angle
-    newAng = mod(pos(3) + actualTurn, 2*pi);
-
-    disp('Completed turnToFacePoint');
-    
-end
-
-function isOnLine = backOnLine(pos, qStart, qGoal)
+function isOnLine = onLine(pos, qStart, qGoal)
 % Determine if robot on line from start to goal.
 %
 % Input:
@@ -349,11 +340,11 @@ function angToTurn = checkForBump(serPort)
 
     % Turn counter-clockwise if bumped
     if BumpRight
-        angToTurn = pi/4;
+        angToTurn = pi/8;
     elseif BumpLeft
-        angToTurn = pi/2 + pi/4;
+        angToTurn = pi/2 + pi/8;
     elseif BumpFront
-        angToTurn = pi/2;
+        angToTurn = pi/4;
     else
         angToTurn = 0;
     end
@@ -393,7 +384,6 @@ function angTurned = turnRadians(serPort, angToTurn)
     
     % loop until turn complete
     while (abs(angTurned) < angToTurn)
-        disp(angTurned);
         pause(0.01);
         angTurned = angTurned + AngleSensorRoomba(serPort);
     end
@@ -407,4 +397,14 @@ function angTurned = turnRadians(serPort, angToTurn)
     % reset angle sensor and update angle
     angTurned = angTurned + AngleSensorRoomba(serPort);
     
+end
+
+function printPosition(pos)
+% Displays x,y,theta position in readible format.
+%
+% Input:
+% pos - Position to display
+
+    fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+
 end
