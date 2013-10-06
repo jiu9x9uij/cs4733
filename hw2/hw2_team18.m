@@ -5,7 +5,7 @@
 function hw2_team18(serPort)
 % Bug2 algorithm to move from a starting point to a goal point.
 % Starts out along the straight line path from start to goal (the M Line). 
-% If it hits any obstacles, it will wall follow until M Line is reacuired,
+% If it hits any obstacles, it will wall follow until M Line is found,
 % then head towards the goal point again on the M Line. Stops at goal.
 %
 % Input:
@@ -101,7 +101,7 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
     
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
-    maxFwdVel = 0.4;     % max allowable forward velocity (m/s)
+    maxFwdVel = 0.3;     % max allowable forward velocity (m/s)
 
     % reset sensors for odomentry
     DistanceSensorRoomba(serPort);
@@ -176,17 +176,12 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
 
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
-    bumpFwdVel = 0.1;    % velocity after bump (m/s)
-    wallFwdVel = 0.3;    % velocity when using wall sensor (m/s)
-    wallAngle = -0.1;    % 7 degrees, amount to turn when wall sensing
     postBumpDist = 0.1;  % min dist to travel after bump (m)
-    distCorrect = 0.02;  % correction when inching forward (m)
-    
     
     % loop variables
     isCloserOnMLine = 0; % true when back on M Line
     isAtGoal = 0;        % true if we reach the goal
-    recentFollowDist = 0;    % dist traveled (m)
+    recentFollowDist = 0;% dist traveled (m)
     qLeave = qHit;       % leave point when we finish (x, y, theta)
     
     % figure out how far we are from goal now
@@ -195,9 +190,6 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
 
     % loop until we're at the goal or back on M Line
     while (~isAtGoal && ~isCloserOnMLine)
-
-        % pause to let the robot run
-        % pause(0.075);
         
         % bail if we've taken too long
         if (toc(tStart) > maxDuration)
@@ -216,8 +208,6 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
         qLeave(1) = qLeave(1) + recentDist * cos(qLeave(3));
         qLeave(2) = qLeave(2) + recentDist * sin(qLeave(3));
         printPosition(qLeave);
-        
-        
 
         % check bump sensors
         [BumpRight, BumpLeft, ~, ~, ~, BumpFront] ...
@@ -271,8 +261,6 @@ function isOnLine = onLine(pos, qStart, qGoal)
 %
 % Output:
 % isOnLine - True if current position on line from start to goal
-
-    % TODO-MATT use a thick line
 
     % constants
     allowableSlopeDiff = 0.05;
@@ -367,16 +355,16 @@ function printPosition(pos)
     dispOrientation = 0.25;
     plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
          [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
-    drawnow;
+    
 end
 
-
-
-% Wall Follow Function
+% Wall Follow Function, taken from HW 1 solution
 function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
 
+    % constants taken from HW 1 solution, moved inside function
     velocity_val = 0.2;
     angular_velocity_val = 0.1;
+    
     % Angle Velocity for different bumps
     av_bumpright =  4 * angular_velocity_val;
     av_bumpleft  =  2 * angular_velocity_val;
