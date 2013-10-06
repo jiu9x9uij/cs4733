@@ -198,7 +198,7 @@ function hw1_team18(serPort)
         % loop until we've circumnavigated
         while ~backAtStart
             % pause to let the robot run
-            pause(0.05);
+            pause(0.075);
 
             % bail if we've gone too far without a wall
             if (distSansBump > maxDistSansBump && distSansWall > maxDistSansBump)
