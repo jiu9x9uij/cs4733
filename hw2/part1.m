@@ -42,14 +42,14 @@ function q2
     m = [0.5,0,0.866;0,1,0;-0.866,0,0.5];
     
     % logic
-    yRotation = {'Ctheta','0','-Stheta';'0','1','0';'Stheta','0','Ctheta'};
+    yRotation = {'Ctheta','0','Stheta';'0','1','0';'-Stheta','0','Ctheta'};
     theta = acosd(m(1,1));
     
     % output
     disp('Axis of rotation is Y, Y-coord wont change for any pts.');
     disp('Y-rotation matrix is:');
     disp(yRotation);
-    fprintf('So theta is inverse cosine of 0.5: %0.1f degrees\n', theta);
+    fprintf('So theta is inverse cosine of 0.5: %0.1f degrees\n', -theta);
 end
 
 function q3
@@ -76,9 +76,9 @@ end
 
 function q5
     % input
-    m = [0.354, 0.674, 0.649, 4.33;...
+    m = [0.354, -0.674, 0.649, 4.33;...
          0.505, 0.722, 0.475, 2.5 ;...
-         0.788, 0.160, 0.595, 8   ;...
+         -0.788, 0.160, 0.595, 8   ;...
          0    , 0    , 0    , 1   ];
 
     % logic
@@ -91,7 +91,7 @@ function q5
     theta = atan2(m(1,3)*cos(phi) + m(2,3)*sin(phi), m(3,3));
 
     % equiv axis rotation and direction
-    eqPhi = acos((trace(m) - 1)/2);
+    eqPhi = acos((trace(m(1:3,1:3)) - 1)/2);
     U = (1/(2*sin(eqPhi)))*[m(3,2)-m(2,3);m(1,3)-m(3,1);m(2,1)-m(1,2)];
     
     % output
