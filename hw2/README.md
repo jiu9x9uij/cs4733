@@ -37,7 +37,6 @@ CS4733 HW2
   functioning bluetooth and the mac connections are slow
 - With incredibly an incredibly slow connection, our odometry was
   pretty far off when testing
-- However we believe our code will work on a wired connection or 
-  a fast Windows connection, so please test on a fast bluetooth
-  connection :)
-
+- Luckily we were able to briefly test the robot on a windows machine
+  in the lab and it looked like things were much better. So our numbers
+  are designed for the lab and that fast windows connection.
