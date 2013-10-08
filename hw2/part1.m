@@ -35,6 +35,9 @@ function q1
     % output
     disp('R23:');
     disp(R23);
+    
+    disp('R21:');
+    disp(R21);
 end
 
 function q2
@@ -121,7 +124,8 @@ function q6
                0, 0, -1,  3  ;...
                0, 0,  0,  1  ];
 
-    tCubeCamera = tCamera\tCube;
+    tCubeInv = inv(tCube);
+    tCubeCamera = tCubeInv*tCamera;
 
     % output
     disp('table in base:');

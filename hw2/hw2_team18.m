@@ -13,6 +13,9 @@ function hw2_team18(serPort)
 
     disp('Starting bug2');
 
+    figure(1);
+    hold on;
+    
     % reset sensors so start is (0,0,0)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
@@ -45,6 +48,7 @@ function hw2_team18(serPort)
     end
     
     disp('Completed bug2');
+    hold off;
     
 end
 
@@ -356,6 +360,8 @@ function printPosition(pos)
     plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
          [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
     
+    drawnow;
+     
 end
 
 % Wall Follow Function, taken from HW 1 solution
