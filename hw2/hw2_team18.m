@@ -21,7 +21,7 @@ function hw2_team18(serPort)
     AngleSensorRoomba(serPort);
 
     % set goal 10m straight in front, angle irrelevant
-    qGoal = [4,0];        
+    qGoal = [10,0];        
     
     % loop variables
     tStart = tic;       % time limit marker
@@ -308,6 +308,11 @@ function angTurned = turnRadians(serPort, angToTurn)
 % Output:
 % angTurned - Actual angle turned (rad)
 
+    if (angToTurn == 0)
+        angTurned = 0;
+        return;
+    end
+
     % constants
     turnSpeed = 0.35; % turn angle speed (rad/s)
 
@@ -399,9 +404,5 @@ function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
     else
         av = 0;                             % Set Angular Velocity to 0
     end
-    SetFwdVelAngVelCreate(serPort, v, av );
+    SetFwdVelAngVelCreate(serPort, v, av);
 end
-
-
-
-
