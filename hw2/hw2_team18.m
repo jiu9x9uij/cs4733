@@ -106,7 +106,13 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
     maxFwdVel = 0.3;     % max allowable forward velocity (m/s)
-
+    
+    if isa(serPort,'CreateRobot')
+        % do nothing
+    else
+        maxFwdVel = .1;
+    end
+    
     % reset sensors for odomentry
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
@@ -180,7 +186,7 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
 
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
-    postBumpDist = 0.1;  % min dist to travel after bump (m)
+    postBumpDist = 0.5;  % min dist to travel after bump (m)
     
     % loop variables
     isCloserOnMLine = 0; % true when back on M Line
@@ -375,9 +381,16 @@ end
 % Wall Follow Function, taken from HW 1 solution
 function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
 
+    
     % constants taken from HW 1 solution, moved inside function
     velocity_val = 0.2;
     angular_velocity_val = 0.1;
+    
+    if isa(serPort,'CreateRobot')
+        % do nothing
+    else
+        velocity_val = .1;
+    end
     
     % Angle Velocity for different bumps
     av_bumpright =  4 * angular_velocity_val;
