@@ -13,15 +13,15 @@ function hw2_team18(serPort)
 
     disp('Starting bug2');
 
-    figure(1);
-    hold on;
+    figure(1); % draw odometry on new plot
+    hold on;   % draw all points on the new plot
     
     % reset sensors so start is (0,0,0)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
 
     % set goal 10m straight in front, angle irrelevant
-    qGoal = [10,0];        
+    qGoal = [4,0];        
     
     % loop variables
     tStart = tic;       % time limit marker
@@ -189,7 +189,7 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
     qLeave = qHit;       % leave point when we finish (x, y, theta)
     
     % figure out how far we are from goal now
-    initDistToGoal = pdist([qLeave(1),qLeave(2);qGoal(1),qGoal(2)],...
+    qHitToGoal = pdist([qHit(1),qHit(2);qGoal(1),qGoal(2)],...
                            'euclidean');
 
     % loop until we're at the goal or back on M Line
@@ -229,8 +229,11 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
             % check if we're closer to the goal
             toGoal = pdist([qLeave(1),qLeave(2);qGoal(1),qGoal(2)],...
                            'euclidean');
-            isCloserOnMLine = toGoal < initDistToGoal;
+            isCloserOnMLine = toGoal < qHitToGoal;
 
+            fprintf('qHit to goal: %.3fm\n', qHitToGoal);
+            fprintf('Curr to goal: %.3fm\n',  toGoal);
+            
             % if we're back at the start, we're trapped
             if (atPoint(qLeave, qHit, toc(tStart)))
                 disp('circumnavigated wall, trapped');
@@ -289,7 +292,7 @@ function isAtPoint = atPoint(pos, qGoal, duration)
 % Output:
 % isAtPoint - True if robot is considered at goal
 
-    distCushion = 0.2 + (duration/60)*0.1;
+    distCushion = 0.15 + (duration/60)*0.03;
     dist = pdist([pos(1), pos(2); qGoal(1), qGoal(2)], 'euclidean'); 
     isAtPoint = dist < distCushion; 
     
