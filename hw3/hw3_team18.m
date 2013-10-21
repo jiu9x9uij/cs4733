@@ -12,8 +12,8 @@ function hw3_team18(serPort)
     %% CONSTANTS %%%%%%%%%%%%%%%%%%%%%
     % 1 will mark empty, 2 will mark filled
     % 0 means that space was never traversed.
-    gridSize = 21;                  %must be odd, robot starts in center ~10 meter grid
-    robotDiameter = .4;             %height and width of each grid square
+    gridSize = 27;                  %must be odd, robot starts in center ~10 meter grid
+    robotDiameter = .35;            %height and width of each grid square
     robotRadius = robotDiameter/2;  % used for marking walls and stuff
     status = 1;                     % state machine!
     done = 0;                       % whether or not the program is done 
@@ -27,6 +27,7 @@ function hw3_team18(serPort)
     grid = createGrid(gridSize);
     tStart = tic;       % time limit marker
     pos = [0,0,0];      % x,y,theta - current position and angle
+    initializePlot(gridSize, robotDiameter);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     %% MAIN LOOP %%%%%%%%%%%%%%%%%%%%%
@@ -37,20 +38,17 @@ function hw3_team18(serPort)
         ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
         ~, ~, ~, ~, ~, pCharge]  = AllSensorsReadRoomba(serPort);
         
-         % update angle
+         % update odometry and print position
         pos(3) = mod(pos(3) + Angle, 2*pi);
-        
-        % update distance and position
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
-        
-        fprintf('POS: (%.3f,%.3f)  ANG: %.3f\n', pos(1), pos(2), pos(3));
+        plotRobot(grid, pos, robotDiameter);
         
         switch status
             case 1  % spiral until you find something
                 currentSpiralSpeed ...
                 = Spiral(currentSpiralSpeed, maxSpiralSpeed, maxFwdVel,serPort);
-                
+                disp('spiraling');
                 if(BumpRight || BumpLeft || BumpFront)
                     SetFwdVelAngVelCreate(serPort,0,0);
                     status = 2; 
@@ -65,7 +63,7 @@ function hw3_team18(serPort)
                 %reset timer if marked during wall follow
                 
                 %copy hw1 solution cases
-                
+                [grid, insideGrid] = markFilled(grid, pos, robotDiameter);
             case 3 % pick random unseen spot and turn towards it
                 [spot, found] = findEmptySpot(grid);
                 if(~found)
@@ -78,7 +76,6 @@ function hw3_team18(serPort)
                 %reset timer if marked
                 
         end
-        drawnow;
     end
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -86,10 +83,12 @@ end
 
 
 function newRadsPerSecond = Spiral(currentRadsPerSecond, maxRadsPerSecond, maxFwdSpeed, serPort)
-    rateOfDecrease = .98;
+    rateOfDecrease = .8;
     newRadsPerSecond = currentRadsPerSecond * rateOfDecrease;
+    SetFwdVelAngVelCreate(serPort, 0.4, newRadsPerSecond);
+    return;
     v = maxFwdSpeed * (1- (currentRadsPerSecond/maxRadsPerSecond));
-    SetFwdVelAngVelCreate(serPort, v, newRadsPerSecond );
+    SetFwdVelAngVelCreate(serPort, v, newRadsPerSecond);
 end
 
 function newAng = turnToFacePoint(serPort, pos, qGoal)
@@ -182,15 +181,15 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
     s = size(grid);
     s = s(1);
     marked = 0;
+    insideGrid = false;  
     [row, col] = translateCoordGridSpace(grid, pos, robotDiameter);
     if(col > s || row > s || col < 0 || row < 0)
         disp('tried to access unknown part of grid!');
-        insideGrid = false;
     else
+        insideGrid = true;
         if(grid(row,col)== 0)
             grid(row,col) = 1; 
             fprintf('empty!  - > row: %f col: %f\n',row,col);
-            insideGrid = true;
             marked = true;
         end
     end
@@ -327,7 +326,7 @@ end
 
 
 
-function initializePlot(map_size)
+function initializePlot(gridSize, robotDiameter)
     figure(1);
     figure(2);
     clf; % clear grid figure
@@ -335,13 +334,17 @@ function initializePlot(map_size)
     % draw on same figure
     hold on;
     
-    % draw axis
-    axis([-map_size/2 map_size/2 -map_size/2 map_size/2]); % in meters
+    % set axis size
+    size = robotDiameter*gridSize/2 + 1;
+    axis([-size size -size size]);
 
-    % draw gray background
-    rectangle('position', [-map_size/2,-map_size/2,map_size,map_size],...
-              'edgecolor',[0.5,0.5,0.5],...
-              'facecolor',[0.5,0.5,0.5]);
+end
+
+function plotRobot(grid, pos, robotDiameter)
+
+    plotPosition(pos);
+    % plotGrid(grid, pos, robotDiameter);
+    drawnow;
 
 end
 
@@ -353,10 +356,11 @@ function plotPosition(pos)
 % pos - Position to display
 
     % print position and orientation
-    fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+    fprintf('POS: (%.3f, %.3f) ANG: %.3f\n',pos(1),pos(2),pos(3)*(180/pi));
 
     % draw odometry on figure 1
-    figure(1); 
+    figure(1);
+    hold on;
 
     % plot position
     plot(pos(1), pos(2), 'b.');
@@ -366,47 +370,64 @@ function plotPosition(pos)
     plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
          [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
     
-    % force figure to update
-    drawnow;
-    
 end
 
 function plotGrid(grid, pos, robot_size)
 
     % draw grid on figure 2
-    figure(2); 
+    figure(2);
+    hold on;
 
     grid_height = size(grid, 1);
     grid_width = size(grid, 2);
-    
+            
     % print the grid
     for row = 1:grid_height;
         for col = 1:grid_width;
-            % x and y are what you would expect from viewing the array
-            x = robot_size*(col-grid_width/2);
-            y = robot_size*(row-grid_height/2);
+            % x and y are bottom left corner of rectangle to draw
+            x = robot_size * (col - grid_width/2 - 1);
+            y = robot_size * (row - grid_height/2 - 1);
+            
+            color = [0.5, 0.5, 0.5];   % unknown is gray
             if grid(row, col) == 1
-                % empty
-                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
-                    robot_size,robot_size], ...
-                    'edgecolor',[0,0,0], ...
-                    'facecolor',[0,0,0]);
+                color = [1, 0.5, 0];   % empty is orange
             elseif grid(row, col) == 2
-                % filled
-                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
-                    robot_size,robot_size], ...
-                    'edgecolor',[1,1,1], ...
-                    'facecolor',[1,1,1]);
-            else
-                % don't know yet
-                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
-                    robot_size,robot_size], ...
-                    'edgecolor',[1,1,1], ...
-                    'facecolor',[1,1,1]);            
+                color = [1, 1, 1];     % filled is white
             end
+            
+            rectangle('position',  [x, y, robot_size, robot_size], ...
+                      'edgecolor', [0, 0, 0], ...
+                      'facecolor', color);
         end
     end
+    
+    % draw a picture of the robot on the grid
+    plot(pos(1), pos(2), 'o');
+    dispOrientation = 0.2;
+    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
+         [pos(2),pos(2)+dispOrientation*sin(pos(3))]);
 
 end
 
+function updateGrid(row, col, value, robot_size, grid_size)
 
+    % draw grid on figure 2
+    figure(2);
+    hold on;
+
+    color = [0.5, 0.5, 0.5]; % unknown is gray
+    if value == 1
+        color = [1, 0.5, 0]; % empty is orange
+    elseif value == 2
+        color = [1, 1, 1];   % filled is white
+    end
+
+    % x and y are bottom left corner of rectangle to draw
+    x = robot_size * (col - grid_size/2 - 1);
+    y = robot_size * (row - grid_size/2 - 1);
+
+    rectangle('position',  [x, y, robot_size, robot_size], ...
+              'edgecolor', [0, 0, 0], ...
+              'facecolor', color);
+
+end
