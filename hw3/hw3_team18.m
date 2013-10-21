@@ -55,12 +55,16 @@ function hw3_team18(serPort)
                     SetFwdVelAngVelCreate(serPort,0,0);
                     status = 2; 
                 else
-                    [grid, insideGrid] = markEmpty(grid, pos, robotDiameter);
+                    [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter);
+                    %reset timer if marked
                 end
                 
             case 2  % wall follow
-                
+                %hit point from case 1 or case 4 
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
+                %reset timer if marked during wall follow
+                
+                %copy hw1 solution cases
                 
             case 3 % pick random unseen spot and turn towards it
                 [spot, found] = findEmptySpot(grid);
@@ -70,7 +74,8 @@ function hw3_team18(serPort)
                     pos(3) = turnToFacePoint(serPort, pos, spot);
                     status = 4;
                 end
-            case 4 % drive straight until you hit something or leave the area
+            case 4 % drive straight until you hit something or leave the area or get there... (spiral then)
+                %reset timer if marked
                 
         end
         drawnow;
@@ -162,7 +167,7 @@ function newGrid = createGrid(gridSize)
 end
 
 
-function [grid, insideGrid] = markEmpty(grid, pos, robotDiameter)
+function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
 % Takes a coordinate position, finds the grid location
 % and if the location isn't already marked as filled
 % it marks it as empty
@@ -176,6 +181,7 @@ function [grid, insideGrid] = markEmpty(grid, pos, robotDiameter)
 % the new grid
     s = size(grid);
     s = s(1);
+    marked = 0;
     [row, col] = translateCoordGridSpace(grid, pos, robotDiameter);
     if(col > s || row > s || col < 0 || row < 0)
         disp('tried to access unknown part of grid!');
@@ -185,6 +191,7 @@ function [grid, insideGrid] = markEmpty(grid, pos, robotDiameter)
             grid(row,col) = 1; 
             fprintf('empty!  - > row: %f col: %f\n',row,col);
             insideGrid = true;
+            marked = true;
         end
     end
 end
