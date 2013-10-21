@@ -12,23 +12,31 @@ function hw3_team18(serPort)
     %% CONSTANTS %%%%%%%%%%%%%%%%%%%%%
     % 1 will mark empty, 2 will mark filled
     % 0 means that space was never traversed.
-    gridSize = 27;                  %must be odd, robot starts in center ~10 meter grid
-    robotDiameter = .35;            %height and width of each grid square
+    gridSize = 29;                  %must be odd, robot starts in center ~10 meter grid
+    robotDiameter = .335;           %height and width of each grid square
     robotRadius = robotDiameter/2;  % used for marking walls and stuff
     status = 1;                     % state machine!
     done = 0;                       % whether or not the program is done 
     maxSpiralSpeed = .4;            % when starting a spiral, the speed of turn
     currentSpiralSpeed = .4;        % keeping track of current speed
     maxFwdVel = .3;                 % maximium speed forward
+    maxTimeWithoutImproving = 120;  % can go 2 minutes without improving grid before we call it off
+    wallFollowThreshold = .2;       % how close we have to be for wall follow being back at start
     
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    %% SET UP %%%%%%%%%%%%%%%%%%%
+    %% SET UP/LOOP VARIABLES %%%%%%%%%%%%%%%%%%%
     grid = createGrid(gridSize);
-    tStart = tic;       % time limit marker
+    tStart = tic;       % total duration marker
+    timeSinceNewSquare = tic; %time marking when we've last improved our grid
+    lastHitPoint = [0,0];   %variable used for wall follow
     pos = [0,0,0];      % x,y,theta - current position and angle
     initializePlot(gridSize, robotDiameter);
+    goalPoint = [0,0];  % used for going to a random spot on the grid
+    isCloserOnMLine = false;    %used for m-line stuff
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    disp('-------- Begin Cover Algorithm --------');
     
     %% MAIN LOOP %%%%%%%%%%%%%%%%%%%%%
     while(~done)
@@ -36,7 +44,7 @@ function hw3_team18(serPort)
         % read all the sensors at once
         [BumpRight, BumpLeft, BumpFront, Wall, ~, ~, ...
         ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
-        ~, ~, ~, ~, ~, pCharge]  = AllSensorsReadRoomba(serPort);
+        ~, ~, ~, ~, ~, ~]  = AllSensorsReadRoomba(serPort);
         
          % update odometry and print position
         pos(3) = mod(pos(3) + Angle, 2*pi);
@@ -51,42 +59,154 @@ function hw3_team18(serPort)
                 disp('spiraling');
                 if(BumpRight || BumpLeft || BumpFront)
                     SetFwdVelAngVelCreate(serPort,0,0);
-                    status = 2; 
+                    if(seenWallBefore(grid, pos, robotDiameter))
+                       status = 4; 
+                    else
+                        lastHitPoint = [pos(1),pos(2)];
+                        status = 2; 
+                        currentSpiralSpeed = maxSpiralSpeed;
+                    end
                 else
                     [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter);
-                    %reset timer if marked
+                    if(marked)
+                        timeSinceNewSquare = tic;
+                    end
                 end
                 
-            case 2  % wall follow
-                %hit point from case 1 or case 4 
-                WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
-                %reset timer if marked during wall follow
+            case 2 % Wall Follow | Haven't left the threshold of the hit point
+                WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
+                if(Wall)
+                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
+                    if(~insideGrid)
+                        status = 4;
+                    end
+                    if(marked)
+                        %reset timer if found new stuff
+                        timeSinceNewSquare = tic;
+                    end
+                end
+                if (GetDistance(pos, lastHitPoint) > wallFollowThreshold)
+                    status = 3;
+                end
                 
-                %copy hw1 solution cases
-                [grid, insideGrid] = markFilled(grid, pos, robotDiameter);
-            case 3 % pick random unseen spot and turn towards it
-                [spot, found] = findEmptySpot(grid);
+            case 3 % Wall Follow | Left the threshold of the hit point
+                WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
+
+                if(Wall)
+                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
+                    if(~insideGrid)
+                        status = 4;
+                    end
+                    if(marked)
+                        %reset timer if found new stuff
+                        timeSinceNewSquare = tic;
+                    end
+                end
+                if(GetDistance(pos, lastHitPoint) < wallFollowThreshold)
+                   status = 4;
+                end
+                
+            case 4 % pick random unseen spot and turn towards it
+                [spot, found] = findEmptySpot(grid, robotDiameter);
                 if(~found)
                     done = true;
+                    disp('no more empty spots on grid!');
                 else
                     pos(3) = turnToFacePoint(serPort, pos, spot);
-                    status = 4;
+                    status = 5;
+                    goalPoint = spot;
                 end
-            case 4 % drive straight until you hit something or leave the area or get there... (spiral then)
+            case 5 % drive straight until you hit something or leave the area or get there... (spiral then)
                 %reset timer if marked
+                SetFwdVelAngVelCreate(serPort,maxFwdVel,0);
+                isAtPoint = atPoint(pos, goalPoint, toc(tStart));
+                if(isAtPoint)
+                    status = 1;
+                end
+                if(BumpRight || BumpLeft || BumpFront)
+                    if(seenWallBefore(grid, pos, robotDiameter))
+                        status = 6; 
+                    else
+                        SetFwdVelAngVelCreate(serPort,0,0);
+                        status = 2;
+                    end
+                    lastHitPoint = [pos(1), pos(2)];
+                else
+                    [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter);
+                    if(marked)
+                        timeSinceNewSquare = tic;
+                    end
+                end
+            case 6 % M-Line wall follow before threshold
+                WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
+                % check if we've reached the goal
+                isAtGoal = atPoint(pos, goalPoint, toc(tStart));
+                if(isAtGoal)
+                    status = 1;
+                end
+                if(GetDistance(pos, lastHitPoint) > wallFollowThreshold)
+                    status = 7;
+                end
+            case 7 % M-Line wall follow after threshold
                 
+                % check if we're on the M Line
+                if (onLine(pos,lastHitPoint, goalPoint)) 
+
+                    disp('On M Line');
+
+                    % check if we're closer to the goal
+                    toGoal = pdist([pos(1),pos(2);goalPoint(1),goalPoint(2)],...
+                                   'euclidean');
+                    original = pdist([lastHitPoint (1),lastHitPoint (2);goalPoint(1),goalPoint(2)],...
+                                   'euclidean');
+                    isCloserOnMLine = toGoal < original;
+
+                    fprintf('qHit to goal: %.3fm\n', qHitToGoal);
+                    fprintf('Curr to goal: %.3fm\n',  toGoal);
+
+                    % if we're back at the start, we're trapped
+                    if (atPoint(lastHitPoint, goalPoint, toc(tStart)))
+                        disp('circumnavigated wall, trapped, setting goal to filled');
+                        markFilled(grid, pos, robotDiameter, false);
+                    end
+                    if(isCloserOnMLine)
+                        pos(3) = turnToFacePoint(serPort, pos, goalPoint);
+                        status = 5;
+                    end
+                end
+        end
+        
+        if(toc(timeSinceNewSquare) > maxTimeWithoutImproving)
+            disp('It seems we haven''t improved grid in too long');
+            done = true;
         end
     end
     
+    disp('-------- End Cover Algorithm --------');
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 end
 
 
+function seenBefore = seenWallBefore(grid, pos, robotDiameter)
+
+    seenBefore = false;
+    frontOfRobot = [pos(1) + (robotDiameter/2)*cos(pos(3)), pos(2) + (robotDiameter/2)*cos(pos(3))];
+    [row,col] = translateCoordGridSpace(grid, frontOfRobot, robotDiameter);
+    if(grid(row,col) ==2)
+        seenBefore = true;
+    end
+    
+end
+
+function dist = GetDistance(point1, point2)
+
+    dist = pdist([point1(1), point1(2); point2(1), point2(2)], 'euclidean'); 
+
+end
+
 function newRadsPerSecond = Spiral(currentRadsPerSecond, maxRadsPerSecond, maxFwdSpeed, serPort)
-    rateOfDecrease = .8;
+    rateOfDecrease = .997;
     newRadsPerSecond = currentRadsPerSecond * rateOfDecrease;
-    SetFwdVelAngVelCreate(serPort, 0.4, newRadsPerSecond);
-    return;
     v = maxFwdSpeed * (1- (currentRadsPerSecond/maxRadsPerSecond));
     SetFwdVelAngVelCreate(serPort, v, newRadsPerSecond);
 end
@@ -169,7 +289,7 @@ end
 function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
 % Takes a coordinate position, finds the grid location
 % and if the location isn't already marked as filled
-% it marks it as empty
+% it marks it as empty. Marks all 4 corners of the robot
 % 
 % Input:
 % grid - the current grid matrix
@@ -181,24 +301,34 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
     s = size(grid);
     s = s(1);
     marked = 0;
-    insideGrid = false;  
-    [row, col] = translateCoordGridSpace(grid, pos, robotDiameter);
-    if(col > s || row > s || col < 0 || row < 0)
-        disp('tried to access unknown part of grid!');
-    else
-        insideGrid = true;
-        if(grid(row,col)== 0)
-            grid(row,col) = 1; 
-            fprintf('empty!  - > row: %f col: %f\n',row,col);
-            marked = true;
+    insideGrid = false;
+    i = 0;
+    while(i < 4)
+        angle = i*(pi/2) + pos(3);
+        spot = [pos(1) + (robotDiameter/2)*cos(angle), pos(2) + (robotDiameter/2)*cos(angle)];
+        [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
+        if(col > s || row > s || col < 0 || row < 0)
+            disp('part of robot in unknown area (not in grid)!');
+        else
+            insideGrid = true;
+            if(grid(row,col)== 0)
+                grid(row,col) = 1; 
+                fprintf('empty!  - > row: %f col: %f\n',row,col);
+                insideGrid = true;
+                marked = true;
+            end
         end
+        i = i +1;
     end
+    
 end
 
-function [grid, insideGrid] = markFilled(grid, pos, robotDiameter)
+
+
+function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, following)
 % Takes a coordinate position, finds the grid location
 % and marks the spot as filled regardless of if it was 
-% previously marked as empty
+% previously marked as empty. It just marks the wall follow side of the bot
 % 
 % Input:
 % grid - the current grid matrix
@@ -209,14 +339,25 @@ function [grid, insideGrid] = markFilled(grid, pos, robotDiameter)
 % the new grid
     s = size(grid);
     s = s(1);
-    [row, col] = translateCoordGridSpace(grid, pos, robotDiameter);
+    marked = false;
+    % to the right of the robot
+    if(following)
+        spot = [pos(1) + (robotDiameter/2)*cos(-pi/2), pos(2) + (robotDiameter/2)*cos(-pi/2)];
+    else
+        spot = pos;
+    end
+    
+    [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
     if(col > s || row > s || col < 0 || row < 0)
         disp('tried to access unknown part of grid!');
         insideGrid = false;
     else
-        grid(row,col) = 2;
-        fprintf('filled! - > row: %f col: %f\n',row,col);
         insideGrid = true;
+        if(grid(row,col)~=2)
+            grid(row,col) = 2;
+            fprintf('filled! - > row: %f col: %f\n',row,col);
+            marked = true;
+        end
     end
 end
 
@@ -237,6 +378,15 @@ function [row, col] = translateCoordGridSpace(grid, pos, robotDiameter)
     row = floor(pos(2)/robotDiameter + offset); % y refers to row
 end
 
+function spot = translateGridSpaceToCoord(grid, robotDiameter, row, col)
+    s = size(grid);
+    s = s(1);
+    spot = [0,0];
+    offset = s/2+1;
+    spot(1) = (col-offset)*robotDiameter;
+    spot(2) = (row-offset)*robotDiameter;
+end
+
 function isAtPoint = atPoint(pos, qGoal, duration)
 % Determine if we're at goal position, which depends on program duration.
 %
@@ -255,20 +405,31 @@ function isAtPoint = atPoint(pos, qGoal, duration)
 end
 
 
-function [spot,found] = findEmptySpot(grid)
+function [spot,found] = findEmptySpot(grid,robotDiameter)
     s = size(grid);
+    spot = [0,0];
     row = 1;
     col = 1;
     found = false;
     while(row <= s(1))
         while(col <= s(2))
-            if(grid(row,col)==0 && ~found)
-                spot = [row,col];
+            if(grid(row,col)==0)
                 found = true;
             end
             col=col+1;
         end
         row=row+1;
+    end
+    if(found)
+    successful = false;
+        while(~successful)
+           row = round(rand(1)*s(1));
+           col = round(rand(1)*s(2));
+           if(grid(row,col)==0)
+              spot = translateGridSpaceToCoord(grid, robotDiameter, row, col)
+              successful = true; 
+           end
+        end
     end
 end
 
@@ -320,7 +481,28 @@ function angTurned = turnRadians(serPort, angToTurn)
     
 end
 
+function isOnLine = onLine(pos, qStart, qGoal)
+% Determine if robot on line from start to goal.
+%
+% Input:
+% pos - Current position of robot (x, y, theta)
+% qStart - Initial position (x, y)
+% qGoal - Goal position (x, y)
+%
+% Output:
+% isOnLine - True if current position on line from start to goal
 
+    % constants
+    allowableSlopeDiff = 0.05;
+
+    % calculate slopes
+    startToCurSlope = (pos(2) - qStart(2))/(pos(1) - qStart(1));
+    curToGoalSlope = (qGoal(2) - pos(2))/(qGoal(1) - pos(1));
+    
+    % determine if on line
+    isOnLine = abs(startToCurSlope - curToGoalSlope) < allowableSlopeDiff;
+
+end
 
 
 
