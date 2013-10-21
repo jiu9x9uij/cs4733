@@ -314,3 +314,92 @@ function angTurned = turnRadians(serPort, angToTurn)
     
 end
 
+
+
+
+
+
+
+function initializePlot(map_size)
+    figure(1);
+    figure(2);
+    clf; % clear grid figure
+
+    % draw on same figure
+    hold on;
+    
+    % draw axis
+    axis([-map_size/2 map_size/2 -map_size/2 map_size/2]); % in meters
+
+    % draw gray background
+    rectangle('position', [-map_size/2,-map_size/2,map_size,map_size],...
+              'edgecolor',[0.5,0.5,0.5],...
+              'facecolor',[0.5,0.5,0.5]);
+
+end
+
+function plotPosition(pos)
+% Prints x,y,theta position in readible format.
+% Plots the position in blue and orientation in green.
+%
+% Input:
+% pos - Position to display
+
+    % print position and orientation
+    fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+
+    % draw odometry on figure 1
+    figure(1); 
+
+    % plot position
+    plot(pos(1), pos(2), 'b.');
+    
+    % plot orientation
+    dispOrientation = 0.25;
+    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
+         [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
+    
+    % force figure to update
+    drawnow;
+    
+end
+
+function plotGrid(grid, pos, robot_size)
+
+    % draw grid on figure 2
+    figure(2); 
+
+    grid_height = size(grid, 1);
+    grid_width = size(grid, 2);
+    
+    % print the grid
+    for row = 1:grid_height;
+        for col = 1:grid_width;
+            % x and y are what you would expect from viewing the array
+            x = robot_size*(col-grid_width/2);
+            y = robot_size*(row-grid_height/2);
+            if grid(row, col) == 1
+                % empty
+                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
+                    robot_size,robot_size], ...
+                    'edgecolor',[0,0,0], ...
+                    'facecolor',[0,0,0]);
+            elseif grid(row, col) == 2
+                % filled
+                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
+                    robot_size,robot_size], ...
+                    'edgecolor',[1,1,1], ...
+                    'facecolor',[1,1,1]);
+            else
+                % don't know yet
+                rectangle('position', [x-robot_size/2,y-robot_size/2, ...
+                    robot_size,robot_size], ...
+                    'edgecolor',[1,1,1], ...
+                    'facecolor',[1,1,1]);            
+            end
+        end
+    end
+
+end
+
+
