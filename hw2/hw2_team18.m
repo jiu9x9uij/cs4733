@@ -21,7 +21,7 @@ function hw2_team18(serPort)
     AngleSensorRoomba(serPort);
 
     % set goal 10m straight in front, angle irrelevant
-    qGoal = [4,0];        
+    qGoal = [10,0];        
     
     % loop variables
     tStart = tic;       % time limit marker
@@ -106,7 +106,13 @@ function [qHit, isAtGoal, failed] = driveToWallOrGoal(serPort, pos,...
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
     maxFwdVel = 0.3;     % max allowable forward velocity (m/s)
-
+    
+    if isa(serPort,'CreateRobot')
+        % do nothing
+    else
+        maxFwdVel = .1;
+    end
+    
     % reset sensors for odomentry
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort);
@@ -180,7 +186,7 @@ function [qLeave, isAtGoal, failed] = followWall(serPort, qHit,...
 
     % constants
     maxDuration = 600;   % max time to allow the program to run (s)
-    postBumpDist = 0.1;  % min dist to travel after bump (m)
+    postBumpDist = 0.3;  % min dist to travel after bump (m)
     
     % loop variables
     isCloserOnMLine = 0; % true when back on M Line
@@ -308,6 +314,11 @@ function angTurned = turnRadians(serPort, angToTurn)
 % Output:
 % angTurned - Actual angle turned (rad)
 
+    if (angToTurn == 0)
+        angTurned = 0;
+        return;
+    end
+
     % constants
     turnSpeed = 0.35; % turn angle speed (rad/s)
 
@@ -374,6 +385,12 @@ function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
     velocity_val = 0.2;
     angular_velocity_val = 0.1;
     
+    if isa(serPort,'CreateRobot')
+        % do nothing
+    else
+        velocity_val = .1;
+    end
+    
     % Angle Velocity for different bumps
     av_bumpright =  4 * angular_velocity_val;
     av_bumpleft  =  2 * angular_velocity_val;
@@ -399,9 +416,5 @@ function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
     else
         av = 0;                             % Set Angular Velocity to 0
     end
-    SetFwdVelAngVelCreate(serPort, v, av );
+    SetFwdVelAngVelCreate(serPort, v, av);
 end
-
-
-
-
