@@ -12,17 +12,17 @@ function hw3_team18(serPort)
     %% CONSTANTS %%%%%%%%%%%%%%%%%%%%%
     % 1 will mark empty, 2 will mark filled
     % 0 means that space was never traversed.
-    gridSize = 29;                  %must be odd, robot starts in center ~10 meter grid
+    gridSize = 31;                  %must be odd, robot starts in center ~10 meter grid
     robotDiameter = .335;           %height and width of each grid square
     robotRadius = robotDiameter/2;  % used for marking walls and stuff
     status = 1;                     % state machine!
     done = 0;                       % whether or not the program is done 
-    maxSpiralSpeed = .4;            % when starting a spiral, the speed of turn
+    maxSpiralSpeed = .4;            % when starting a spiral, the speed of turn (rads/sec)
     currentSpiralSpeed = .4;        % keeping track of current speed
-    maxFwdVel = .3;                 % maximium speed forward
+    maxFwdVel = .2;                 % maximium speed forward
     maxTimeWithoutImproving = 180;  % can go 3 minutes without improving grid before we call it off
     wallFollowThreshold = .2;       % how close we have to be for wall follow being back at start
-    
+    spiralFwdSpeed = .3;            % fwd vel used for spiral calculations
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     %% SET UP/LOOP VARIABLES %%%%%%%%%%%%%%%%%%%
@@ -40,7 +40,7 @@ function hw3_team18(serPort)
     
     %% MAIN LOOP %%%%%%%%%%%%%%%%%%%%%
     while(~done)
-        pause(.1);
+        
         % read all the sensors at once
         [BumpRight, BumpLeft, BumpFront, Wall, ~, ~, ...
         ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
@@ -50,13 +50,14 @@ function hw3_team18(serPort)
         pos(3) = mod(pos(3) + Angle, 2*pi);
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
-        plotPosition(pos);
-        
+        plotPosition(pos, status);
+      
         switch status
             case 1  % spiral until you find something
+                pause(.1); %used because spiral is time dependent
                 currentSpiralSpeed ...
-                = Spiral(currentSpiralSpeed, maxSpiralSpeed, maxFwdVel,serPort);
-                disp('spiraling');
+                = Spiral(currentSpiralSpeed, maxSpiralSpeed, spiralFwdSpeed,serPort);
+                
                 if(BumpRight || BumpLeft || BumpFront)
                     SetFwdVelAngVelCreate(serPort,0,0);
                     if(seenWallBefore(grid, pos, robotDiameter))
@@ -122,7 +123,7 @@ function hw3_team18(serPort)
                     goalPoint = spot;
                 end
             case 5 % drive straight to goal, unless you hit something or leave the area
-                SetFwdVelAngVelCreate(serPort,maxFwdVel,0);
+                
                 isAtPoint = atPoint(pos, goalPoint, toc(tStart));
                 if(isAtPoint)
                     status = 1;
@@ -131,7 +132,6 @@ function hw3_team18(serPort)
                     if(seenWallBefore(grid, pos, robotDiameter))
                         status = 6; 
                     else
-                        SetFwdVelAngVelCreate(serPort,0,0);
                         status = 2;
                     end
                     lastHitPoint = [pos(1), pos(2)];
@@ -143,7 +143,9 @@ function hw3_team18(serPort)
                     if(marked)
                         timeSinceNewSquare = tic;
                     end
+                    SetFwdVelAngVelCreate(serPort,maxFwdVel,0);
                 end
+                
             case 6 % M-Line wall follow before threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
                 % check if we've reached the goal
@@ -168,7 +170,7 @@ function hw3_team18(serPort)
                     isCloserOnMLine = toGoal < original;
 
                     % if we're back at the start, goal is unreachable
-                    if (atPoint(lastHitPoint, goalPoint, toc(tStart)))
+                    if (atPoint(pos, goalPoint, toc(tStart)))
                         disp('circumnavigated wall, trapped, setting goal to filled');
                         markFilled(grid, goalPoint, robotDiameter, false);
                         status = 4;
@@ -185,7 +187,7 @@ function hw3_team18(serPort)
             disp('It seems we haven''t improved grid in too long');
             done = true;
         end
-        
+        fprintf('lasthit: (%.3f,%.3f), goal: (%.3f,%.3f) \n', lastHitPoint(1), lastHitPoint(2), goalPoint(1), goalPoint(2));
         drawnow;
     end
     
@@ -195,12 +197,34 @@ end
 
 
 function seenBefore = seenWallBefore(grid, pos, robotDiameter)
-
+    s = size(grid);
+    s = s(1);
     seenBefore = false;
-    frontOfRobot = [pos(1) + (robotDiameter/2)*cos(pos(3)), pos(2) + (robotDiameter/2)*cos(pos(3))];
+    i = 0;
+    while(i < 4)
+        angle = i*(pi/2) + pos(3);
+        spot = [pos(1) + (robotDiameter/2)*cos(angle), pos(2) + (robotDiameter/2)*cos(angle)];
+        [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
+        if(col > s || row > s || col == 0 || row == 0)
+            %do nothing
+        else
+            if(grid(row,col)== 2)
+                seenBefore = true;
+                return;
+            end
+        end
+        i = i +1;
+    end
+    %additionally check farther forward
+    
+    frontOfRobot = [pos(1) + (robotDiameter)*cos(pos(3)), pos(2) + (robotDiameter)*cos(pos(3))];
     [row,col] = translateCoordGridSpace(grid, frontOfRobot, robotDiameter);
-    if(grid(row,col) == 2)
-        seenBefore = true;
+    if(col > s || row > s || col == 0 || row == 0)
+            %do nothing
+    else
+        if(grid(row,col) == 2)
+            seenBefore = true;
+        end
     end
     
 end
@@ -312,7 +336,7 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
         angle = i*(pi/2) + pos(3);
         spot = [pos(1) + (robotDiameter/2)*cos(angle), pos(2) + (robotDiameter/2)*cos(angle)];
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
-        if(col > s || row > s || col < 0 || row < 0)
+        if(col > s || row > s || col == 0 || row == 0)
             disp('part of robot in unknown area (not in grid)!');
         else
             insideGrid = true;
@@ -347,13 +371,13 @@ function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, follo
     marked = false;
     % to the right of the robot
     if(following)
-        spot = [pos(1) + (robotDiameter/2)*cos(-pi/2), pos(2) + (robotDiameter/2)*cos(-pi/2)];
+        spot = [pos(1) + (robotDiameter/2)*cos(pos(3)-pi/2), pos(2) + (robotDiameter/2)*cos(pos(3)-pi/2)];
     else
         spot = pos;
     end
     
     [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
-    if(col > s || row > s || col < 0 || row < 0)
+    if(col > s || row > s || col == 0 || row == 0)
         disp('tried to access unknown part of grid!');
         insideGrid = false;
     else
@@ -514,9 +538,9 @@ end
 
 
 
-function initializePlot(gridSize, robotDiameter)
+function initializePlot(gridSize, robot_size)
 
-    size = robotDiameter*gridSize/2 + 1;
+    size = robot_size*gridSize/2 + 1;
 
     figure(1);
     hold on;
@@ -543,7 +567,7 @@ function initializePlot(gridSize, robotDiameter)
 
 end
 
-function plotPosition(pos)
+function plotPosition(pos, status)
 % Prints x,y,theta position in readible format.
 % Plots the position in blue and orientation in green.
 %
@@ -551,7 +575,7 @@ function plotPosition(pos)
 % pos - Position to display
 
     % print position and orientation
-    fprintf('POS: (%.3f, %.3f) ANG: %.3f\n',pos(1),pos(2),pos(3)*(180/pi));
+    %fprintf('POS: (%.3f, %.3f) ANG: %.3f  STAT: %d\n',pos(1),pos(2),pos(3)*(180/pi),status);
 
     % draw odometry on figure 1
     figure(1);
