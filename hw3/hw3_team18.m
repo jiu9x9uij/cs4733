@@ -50,7 +50,7 @@ function hw3_team18(serPort)
         pos(3) = mod(pos(3) + Angle, 2*pi);
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
-        plotRobot(grid, pos, robotDiameter);
+        plotPosition(pos);
         
         switch status
             case 1  % spiral until you find something
@@ -157,7 +157,7 @@ function hw3_team18(serPort)
                     % check if we're closer to the goal
                     toGoal = pdist([pos(1),pos(2);goalPoint(1),goalPoint(2)],...
                                    'euclidean');
-                    original = pdist([lastHitPoint (1),lastHitPoint (2);goalPoint(1),goalPoint(2)],...
+                    original = pdist([lastHitPoint(1),lastHitPoint(2);goalPoint(1),goalPoint(2)],...
                                    'euclidean');
                     isCloserOnMLine = toGoal < original;
 
@@ -180,6 +180,8 @@ function hw3_team18(serPort)
             disp('It seems we haven''t improved grid in too long');
             done = true;
         end
+        
+        drawnow;
     end
     
     disp('-------- End Cover Algorithm --------');
@@ -316,6 +318,7 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
                 fprintf('empty!  - > row: %f col: %f\n',row,col);
                 insideGrid = true;
                 marked = true;
+                updateGrid(row, col, 1, robotDiameter, s);
             end
         end
         i = i +1;
@@ -357,6 +360,7 @@ function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, follo
             grid(row,col) = 2;
             fprintf('filled! - > row: %f col: %f\n',row,col);
             marked = true;
+            updateGrid(row, col, 2, robotDiameter, s);
         end
     end
 end
@@ -426,7 +430,7 @@ function [spot,found] = findEmptySpot(grid,robotDiameter)
            row = round(rand(1)*s(1));
            col = round(rand(1)*s(2));
            if(grid(row,col)==0)
-              spot = translateGridSpaceToCoord(grid, robotDiameter, row, col)
+              spot = translateGridSpaceToCoord(grid, robotDiameter, row, col);
               successful = true; 
            end
         end
@@ -509,24 +513,31 @@ end
 
 
 function initializePlot(gridSize, robotDiameter)
-    figure(1);
-    figure(2);
-    clf; % clear grid figure
 
-    % draw on same figure
-    hold on;
-    
-    % set axis size
     size = robotDiameter*gridSize/2 + 1;
+
+    figure(1);
+    hold on;
     axis([-size size -size size]);
 
-end
+    figure(2);
+    hold on;
+    clf; % clear grid figure
+    axis([-size size -size size]);
 
-function plotRobot(grid, pos, robotDiameter)
-
-    plotPosition(pos);
-    % plotGrid(grid, pos, robotDiameter);
-    drawnow;
+    
+    % print the grid
+    for row = 1:gridSize;
+        for col = 1:gridSize;
+            % x and y are bottom left corner of rectangle to draw
+            x = robot_size * (col - gridSize/2 - 1);
+            y = robot_size * (row - gridSize/2 - 1);
+            color = [0.5, 0.5, 0.5];   % unknown is gray
+            rectangle('position',  [x, y, robot_size, robot_size], ...
+                      'edgecolor', [0, 0, 0], ...
+                      'facecolor', color);
+        end
+    end
 
 end
 
@@ -552,43 +563,6 @@ function plotPosition(pos)
     plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
          [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
     
-end
-
-function plotGrid(grid, pos, robot_size)
-
-    % draw grid on figure 2
-    figure(2);
-    hold on;
-
-    grid_height = size(grid, 1);
-    grid_width = size(grid, 2);
-            
-    % print the grid
-    for row = 1:grid_height;
-        for col = 1:grid_width;
-            % x and y are bottom left corner of rectangle to draw
-            x = robot_size * (col - grid_width/2 - 1);
-            y = robot_size * (row - grid_height/2 - 1);
-            
-            color = [0.5, 0.5, 0.5];   % unknown is gray
-            if grid(row, col) == 1
-                color = [1, 0.5, 0];   % empty is orange
-            elseif grid(row, col) == 2
-                color = [1, 1, 1];     % filled is white
-            end
-            
-            rectangle('position',  [x, y, robot_size, robot_size], ...
-                      'edgecolor', [0, 0, 0], ...
-                      'facecolor', color);
-        end
-    end
-    
-    % draw a picture of the robot on the grid
-    plot(pos(1), pos(2), 'o');
-    dispOrientation = 0.2;
-    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
-         [pos(2),pos(2)+dispOrientation*sin(pos(3))]);
-
 end
 
 function updateGrid(row, col, value, robot_size, grid_size)
