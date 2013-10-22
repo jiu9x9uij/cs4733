@@ -2,17 +2,17 @@ Alden Quimby - adq2101
 Matthew Dean - mtd2121
 CS4733 HW3
 
-- !!!! Notes on running algorithm
-    - In order to make the algorithm run most efficiently, tweak the gridsize
-      variable to most closely match the space to be explored. Currently the
-      gridsize is made for the size of the default SimulatorGUI screen (10m)
-      An issue arises if the gridsize is much larger than the actual space
-      enclosing the robot since it will try and explore the unreachable area
-      and continually lap the room trying to get there. This is because we
-      choose our points from the grid itself. 
-      The gridsize referes to the number
-      of robot diameters that make up the size of the square. The robot is of
-      diameter .335 meters. 
+- TO RUN OUR CODE
+  - Please place robot in center of map for correct output plotting.
+  - For grids smaller than 10m by 10m, please tweak gridSize variable.
+    - The gridsize referes to the number of robot diameters that make up the 
+      size of the square.
+    - By default grid size is 31, which means 10 meters
+  - If the gridsize is much larger than the actual space enclosing the robot,
+    everything will still work, but it will be slow to explore the space
+    because when we pick random points, they will often be unreachable.
+  - If the simulator is running slowly, trying closing the plots, especially the position
+    plot which has lots of points. The correct occupancy grid will still be displayed at end.
 
 - Goal
   - Cover environment with spiraling, random driving, wall following
@@ -65,4 +65,4 @@ CS4733 HW3
       line every time we update odometry
     - We print the current grid to a separate plot with gray for unknown 
       spaces, orange for empty spaces, and white for filled spaces
-
+    - We re-print the whole grid at the end in case it was closed while running.
