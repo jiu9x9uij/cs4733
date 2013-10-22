@@ -178,17 +178,6 @@ function hw3_team18(serPort)
                 % check if we're on the M Line
                 if (onLine(pos, lastHitPoint, goalPoint))
                     disp('On M Line');
-
-                    % if we're back at the start, goal is unreachable
-                    if (atPoint(pos, lastHitPoint, toc(tStart)))
-                        disp('circumnavigated/trapped, setting goal to filled');
-                        [grid, ~, marked] = markFilled(grid, pos, robotDiameter, false);
-                        if (marked)
-                            timeSinceNewSquare = tic; % reset timer
-                        end
-                        status = 4; % go to random point
-                    end
-                    
                     % check if we're closer to the goal
                     toGoal = getDistance(pos, goalPoint);
                     original = getDistance(lastHitPoint, goalPoint);
@@ -196,6 +185,15 @@ function hw3_team18(serPort)
                         pos(3) = turnToFacePoint(serPort, pos, goalPoint);
                         status = 5; % straight to goal point
                     end
+                end
+                % if we're back at the start, goal is unreachable
+                if (atPoint(pos, lastHitPoint, toc(tStart)))
+                    disp('circumnavigated/trapped, setting goal to filled');
+                    [grid, ~, marked] = markFilled(grid, pos, robotDiameter, false);
+                    if (marked)
+                        timeSinceNewSquare = tic; % reset timer
+                    end
+                    status = 4; % go to random point
                 end
         end
         
@@ -573,7 +571,7 @@ function isAtPoint = atPoint(pos, qGoal, duration)
 % Output:
 % isAtPoint - True if robot is considered at goal
 
-    distCushion = 0.15 + (duration/60)*0.03;
+    distCushion = 0.2 + (duration/60)*0.04;
     dist = getDistance(pos, qGoal); 
     isAtPoint = dist < distCushion; 
     
