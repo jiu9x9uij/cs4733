@@ -33,9 +33,11 @@ CS4733 HW3
     - If any part of the robot is ever outside this grid, we stop,
       pick a random unexplored point, and drive to it
     - When driving along, we mark grid spaces corresponding to four x,y
-      points (front, left, right, back of robot) as either filled or empty
+      points (front, left, right, back of robot) as empty
     - In general this updates 1 grid space, but it's possible that 4 
       spaces update at once if the robot is on top of 4 grid spaces
+    - When wall following we update the grid space located to the direct
+      right of the robot (where it is near the wall) as being filled
     - If a space was previously marked empty, it can later be marked 
       filled, but not the other way around
     - When a wall is encountered, we count it as previously encountered
@@ -44,7 +46,7 @@ CS4733 HW3
     - If we are trying to drive to a random point and encounter a known
       obstacle, and then circumnavigate that obstacle, it means the random
       point is unreachable (based on bug2 algorithm)
-        - We mark the point filled so that we don't randomly pick it agian
+        - We mark the point filled so that we don't randomly pick it again
 
 - Plotting
     - We print current position in blue and orientation as a green 
