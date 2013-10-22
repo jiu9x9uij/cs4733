@@ -14,7 +14,7 @@ function hw3_team18(serPort)
     status = 1;                     % state machine
     done = 0;                       % whether or not the program is done 
     maxSpiralSpeed = .4;            % max spiral turn speed (rad/s)
-    maxFwdVel = .2;                 % max speed forward (m/s)
+    maxFwdVel = .15;                % max speed forward (m/s)
     spiralFwdSpeed = .3;            % fwd vel used for spiral (m/s)
     maxTimeWithoutImproving = 180;  % die after 3 mins without grid change
     wallFollowThreshold = .2;       % how close we have to be for wall follow being back at start
@@ -44,9 +44,10 @@ function hw3_team18(serPort)
         pos(3) = mod(pos(3) + Angle, 2*pi);
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
-        plotPosition(pos, status);
+        plotPosition(pos);
       
         switch status
+            
             case 1  % spiral until you find something
                 currentSpiralSpeed = Spiral(currentSpiralSpeed,... 
                                             maxSpiralSpeed,...
@@ -82,6 +83,7 @@ function hw3_team18(serPort)
                     end
                 end
                 if (getDistance(pos, lastHitPoint) > wallFollowThreshold)
+                    disp('wall follow, left threshold');
                     status = 3; % wall follow, left threshold
                 end
                 
@@ -112,6 +114,7 @@ function hw3_team18(serPort)
                     status = 5; % straight to goal point
                     goalPoint = spot;
                 end
+                
             case 5 % drive straight to goal, unless you hit something or leave the area
                 
                 isAtPoint = atPoint(pos, goalPoint, toc(tStart));
@@ -119,6 +122,7 @@ function hw3_team18(serPort)
                     status = 1; % spiral
                 end
                 if (BumpRight || BumpLeft || BumpFront)
+                    SetFwdVelAngVelCreate(serPort,0,0);
                     if (seenWallBefore(grid, pos, robotDiameter))
                         status = 6; % m-line wall follow
                     else
@@ -145,19 +149,24 @@ function hw3_team18(serPort)
                     status = 4; % go to random point
                 end
                 if (getDistance(pos, lastHitPoint) > wallFollowThreshold)
+                    disp('m-line wall follow, left threshold');
                     status = 7; % m-line wall follow, left threshold
                 end
+                
             case 7 % M-Line wall follow after threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
                 
                 % check if we're on the M Line
-                if (onLine(pos, lastHitPoint, goalPoint)) 
+                if (onLine(pos, lastHitPoint, goalPoint))
                     disp('On M Line');
 
                     % if we're back at the start, goal is unreachable
                     if (atPoint(pos, goalPoint, toc(tStart)))
                         disp('circumnavigated/trapped, setting goal to filled');
-                        markFilled(grid, goalPoint, robotDiameter, false);
+                        [grid, ~, marked] = markFilled(grid, pos, robotDiameter, false);
+                        if (marked)
+                            timeSinceNewSquare = tic; % reset timer
+                        end
                         status = 4; % go to random point
                     end
                     
@@ -171,7 +180,7 @@ function hw3_team18(serPort)
                 end
         end
         
-        if(toc(timeSinceNewSquare) > maxTimeWithoutImproving)
+        if (toc(timeSinceNewSquare) > maxTimeWithoutImproving)
             disp('It seems we haven''t improved grid in too long');
             done = true;
         end
@@ -180,6 +189,13 @@ function hw3_team18(serPort)
     end 
     disp('-------- End Cover Algorithm --------');
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+        for row = 1:grid_size;
+            for col = 1:grid_size;
+                updateGrid2(row, col, grid(row, col), robotDiameter, gridSize);
+            end
+        end
+    
 end
 
 %% COVER UTILITIES %%%%%%%%%%%%%%%%%%%%%
@@ -654,7 +670,7 @@ function plotPosition(pos)
     
 end
 
-function updateGrid(row, col, value, robot_size, grid_size)
+function updateGrid2(row, col, value, robot_size, grid_size)
 % Update square in occupancy grid plot.
 %
 % Input:
@@ -664,6 +680,37 @@ function updateGrid(row, col, value, robot_size, grid_size)
 % robot_size - diameter of robot (m)
 % grid_size - number of grid squares (assume grid is square)
 
+    % draw grid on figure 2
+    figure(2);
+    hold on;
+
+    color = [0.5, 0.5, 0.5]; % unknown is gray
+    if value == 1
+        color = [1, 0.5, 0]; % empty is orange
+    elseif value == 2
+        color = [1, 1, 1];   % filled is white
+    end
+
+    % x and y are bottom left corner of rectangle to draw
+    x = robot_size * (col - grid_size/2 - 1);
+    y = robot_size * (row - grid_size/2 - 1);
+
+    rectangle('position',  [x, y, robot_size, robot_size], ...
+              'edgecolor', [0, 0, 0], ...
+              'facecolor', color);
+
+end
+
+function updateGrid(row, col, value, robot_size, grid_size)
+% Update square in occupancy grid plot.
+%
+% Input:
+% row - row to update
+% col - col to update
+% value - new value of grid square
+% robot_size - diameter of robot (m)
+% grid_size - number of grid squares (assume grid is square)
+return;
     % draw grid on figure 2
     figure(2);
     hold on;
