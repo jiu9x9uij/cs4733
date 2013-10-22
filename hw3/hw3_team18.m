@@ -423,6 +423,12 @@ function [spot, found] = findEmptySpot(grid, robotDiameter)
         while (~successful)
            row = round(rand(1)*s(1));
            col = round(rand(1)*s(2));
+           if (row == 0) 
+               row = 1; 
+           end
+           if (col == 0) 
+               col = 1; 
+           end
            if (grid(row,col)==0)
               spot = translateGridSpaceToCoord(grid, robotDiameter, row, col);
               successful = true; 
