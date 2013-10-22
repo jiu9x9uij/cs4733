@@ -9,7 +9,7 @@ function hw3_team18(serPort)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     %% CONSTANTS %%%%%%%%%%%%%%%%%%%%%
-    gridSize = 31;                  % must be odd, this is ~10m grid
+    gridSize = 15;                  % must be odd, this is ~10m grid
     robotDiameter = .335;           % height and width of each grid square
     status = 1;                     % state machine
     done = 0;                       % whether or not the program is done 
@@ -190,11 +190,12 @@ function hw3_team18(serPort)
     disp('-------- End Cover Algorithm --------');
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-        for row = 1:grid_size;
-            for col = 1:grid_size;
-                updateGrid2(row, col, grid(row, col), robotDiameter, gridSize);
-            end
+    % draw grid now that we're done
+    for row = 1:gridSize;
+        for col = 1:gridSize;
+            updateGrid2(row, col, grid(row, col), robotDiameter, gridSize);
         end
+    end
     
 end
 
