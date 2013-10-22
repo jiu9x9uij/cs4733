@@ -57,8 +57,10 @@ function hw3_team18(serPort)
                     SetFwdVelAngVelCreate(serPort,0,0);
                     if (seenWallBefore(grid, pos, robotDiameter))
                        status = 4; % go to random point
+                  
                     else
                         status = 2;  % start wall follow
+                        disp('start wall follow');
                     end
                     lastHitPoint = [pos(1), pos(2)];
                     currentSpiralSpeed = maxSpiralSpeed;
@@ -143,7 +145,15 @@ function hw3_team18(serPort)
                 
             case 6 % M-Line wall follow before threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
-
+                if (Wall)
+                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
+                    if (~insideGrid)
+                        status = 4; % go to random point
+                    end
+                    if (marked)
+                        timeSinceNewSquare = tic; % reset timer
+                    end
+                end
                 % check if we're at the goal point
                 isAtGoal = atPoint(pos, goalPoint, toc(tStart));
                 if (isAtGoal)
@@ -156,7 +166,15 @@ function hw3_team18(serPort)
                 
             case 7 % M-Line wall follow after threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
-                
+                if (Wall)
+                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
+                    if (~insideGrid)
+                        status = 4; % go to random point
+                    end
+                    if (marked)
+                        timeSinceNewSquare = tic; % reset timer
+                    end
+                end
                 % check if we're on the M Line
                 if (onLine(pos, lastHitPoint, goalPoint))
                     disp('On M Line');
