@@ -65,10 +65,7 @@ function hw3_team18(serPort)
                     lastHitPoint = [pos(1), pos(2)];
                     currentSpiralSpeed = maxSpiralSpeed;
                 else
-                    [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markEmpty(grid, pos, robotDiameter);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -77,10 +74,7 @@ function hw3_team18(serPort)
             case 2 % Wall Follow | Haven't left the threshold of the hit point
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
                 if (Wall)
-                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markFilled(grid, pos, robotDiameter, true);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -94,10 +88,7 @@ function hw3_team18(serPort)
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
 
                 if (Wall)
-                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markFilled(grid, pos, robotDiameter, true);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -133,10 +124,7 @@ function hw3_team18(serPort)
                     end
                     lastHitPoint = [pos(1), pos(2)];
                 else
-                    [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markEmpty(grid, pos, robotDiameter);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -146,10 +134,7 @@ function hw3_team18(serPort)
             case 6 % M-Line wall follow before threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
                 if (Wall)
-                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markFilled(grid, pos, robotDiameter, true);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -167,10 +152,7 @@ function hw3_team18(serPort)
             case 7 % M-Line wall follow after threshold
                 WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort);
                 if (Wall)
-                    [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, true);
-                    if (~insideGrid)
-                        status = 4; % go to random point
-                    end
+                    [grid, marked] = markFilled(grid, pos, robotDiameter, true);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -187,9 +169,9 @@ function hw3_team18(serPort)
                     end
                 end
                 % if we're back at the start, goal is unreachable
-                if (atPoint(pos, lastHitPoint, toc(tStart)))
+                if (getDistance(pos, lastHitPoint) < wallFollowThreshold)
                     disp('circumnavigated/trapped, setting goal to filled');
-                    [grid, ~, marked] = markFilled(grid, pos, robotDiameter, false);
+                    [grid, marked] = markFilled(grid, pos, robotDiameter, false);
                     if (marked)
                         timeSinceNewSquare = tic; % reset timer
                     end
@@ -292,7 +274,7 @@ function newRadsPerSecond = Spiral(currentRadsPerSecond, maxRadsPerSecond, maxFw
     
 end
 
-function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
+function [grid, marked] = markEmpty(grid, pos, robotDiameter)
 % Takes a coordinate position, finds the grid location and if the location 
 % isn't already marked as filled it marks it as empty. 
 % Marks all 4 corners of the robot, not just robot center.
@@ -304,7 +286,6 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
 %
 % Output:
 % grid - the new grid matrix
-% insideGrid - true if robot is inside grid
 % marked - true if grid was updated
 
     s = size(grid, 1);
@@ -317,10 +298,8 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
         if (col > s || row > s || col == 0 || row == 0)
             disp('robot in unknown area (not in grid)!');
-            insideGrid = false;
-            return;
+            %return;
         else
-            insideGrid = true;
             if (grid(row,col)== 0)
                 grid(row,col) = 1; 
                 fprintf('empty!  - > row: %f col: %f\n',row,col);
@@ -333,7 +312,7 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
     
 end
 
-function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, following)
+function [grid, marked] = markFilled(grid, pos, robotDiameter, following)
 % Takes a coordinate position, finds the grid location and marks the spot 
 % as filled regardless of if it was previously marked as empty. 
 % Marks only the right side of the robot, not the center.
@@ -346,7 +325,6 @@ function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, follo
 %
 % Output:
 % grid - the new grid matrix
-% insideGrid - true if robot is inside grid
 % marked - true if grid was updated
 
     s = size(grid, 1);
@@ -363,9 +341,7 @@ function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, follo
     [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
     if (col > s || row > s || col == 0 || row == 0)
         disp('tried to access unknown part of grid!');
-        insideGrid = false;
     else
-        insideGrid = true;
         if (grid(row,col)~=2)
             grid(row,col) = 2;
             fprintf('filled! - > row: %f col: %f\n',row,col);

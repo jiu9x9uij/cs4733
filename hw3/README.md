@@ -42,8 +42,8 @@ CS4733 HW3
     - We used the WallFollow function from the hw1 solution
     - We made an occupancy grid roughly 10m wide, 10m high, and assume
       the robot starts at the center of this grid
-    - If any part of the robot is ever outside this grid, we stop,
-      pick a random unexplored point, and drive to it
+    - If any part of the robot is ever outside this grid, we simply ignore it
+      in our plots and the robot will work it's way back inside the grid
     - When driving along, we mark grid spaces corresponding to four x,y
       points (front, left, right, back of robot) as empty
     - In general this updates 1 grid space, but it's possible that 4 
