@@ -225,7 +225,8 @@ function seenBefore = seenWallBefore(grid, pos, robotDiameter)
     % check front, left, right and back of robot for known obstacle
     while(i < 4)
         angle = i*(pi/2) + pos(3);
-        spot = [pos(1) + (robotDiameter/2)*cos(angle), pos(2) + (robotDiameter/2)*cos(angle)];
+        spot = [pos(1) + (robotDiameter/2)*cos(angle),...
+                pos(2) + (robotDiameter/2)*sin(angle)];
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
         if (col > s || row > s || col == 0 || row == 0)
             % do nothing
@@ -238,7 +239,7 @@ function seenBefore = seenWallBefore(grid, pos, robotDiameter)
     
     % check one extra point in front of robot, in case odometry is off
     frontOfRobot = [pos(1) + (robotDiameter)*cos(pos(3)),...
-                    pos(2) + (robotDiameter)*cos(pos(3))];
+                    pos(2) + (robotDiameter)*sin(pos(3))];
     [row,col] = translateCoordGridSpace(grid, frontOfRobot, robotDiameter);
     if (col > s || row > s || col == 0 || row == 0)
         % do nothing
@@ -292,16 +293,16 @@ function [grid, insideGrid, marked] = markEmpty(grid, pos, robotDiameter)
 
     s = size(grid, 1);
     marked = 0;
-    insideGrid = false;
     i = 0;
     while (i < 4)
         angle = i*(pi/2) + pos(3);
         spot = [pos(1) + (robotDiameter/2)*cos(angle), ...
-                pos(2) + (robotDiameter/2)*cos(angle)];
+                pos(2) + (robotDiameter/2)*sin(angle)];
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
         if (col > s || row > s || col == 0 || row == 0)
-            disp('part of robot in unknown area (not in grid)!');
-            break;
+            disp('robot in unknown area (not in grid)!');
+            insideGrid = false;
+            return;
         else
             insideGrid = true;
             if (grid(row,col)== 0)
@@ -338,7 +339,7 @@ function [grid, insideGrid, marked] = markFilled(grid, pos, robotDiameter, follo
     % to the right of the robot
     if (following)
         spot = [pos(1) + (robotDiameter/2)*cos(pos(3)-pi/2),...
-                pos(2) + (robotDiameter/2)*cos(pos(3)-pi/2)];
+                pos(2) + (robotDiameter/2)*sin(pos(3)-pi/2)];
     else
         spot = pos;
     end
@@ -408,20 +409,19 @@ function [spot, found] = findEmptySpot(grid, robotDiameter)
 
     s = size(grid);
     spot = [0,0];
-    row = 1;
-    col = 1;
     found = false;
     
     % first check if any spots are unknown
-    while(row <= s(1))
-        while(col <= s(2))
-            if (grid(row,col)==0)
+    for row = 1:s(1);
+        for col = 1:s(1);
+            if (grid(row, col)==0)
                 found = true;
                 break;
             end
-            col=col+1;
         end
-        row=row+1;
+        if (found)
+            break;
+        end
     end
     
     if (found)
