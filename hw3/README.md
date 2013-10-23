@@ -4,18 +4,14 @@ CS4733 HW3
 
 - TO RUN OUR CODE
   - Please place robot in center of map for correct output plotting.
-  - For grids smaller than 10m by 10m, please tweak gridSize variable.
-    - The gridsize referes to the number of robot diameters that make up the 
-      size of the square.
-    - By default grid size is 31, which means 10 meters
-  - If the gridsize is much larger than the actual space enclosing the robot,
-    everything will still work, but it will be slow to explore the space
-    because when we pick random points, they will often be unreachable.
-  - If the simulator is running slowly, trying closing the plots, especially the position
-    plot which has lots of points. The correct occupancy grid will still be displayed at end.
-
-- Goal
-  - Cover environment with spiraling, random driving, wall following
+  - Please set the "gridSizeWidth" and "gridSizeHeight" constants at the top of the program
+    - gridSize referes to the number of robot diameters that make up the height and 
+      width of the containing area.
+    - By default we use 31 and 31, meaning 10m by 10m
+  - If the gridsize is larger than the actual space enclosing the robot,
+    everything will still work, but it migth explore the space slowly.
+  - If the simulator is running slowly, trying closing the odometry plot (not the grid plot).
+    We found that after a few minutes, this plot had lots of points and slowed the simulator.
 
 - Basic algorithm
   - Start by spiraling until an obstacle is hit
@@ -45,14 +41,14 @@ CS4733 HW3
     - If any part of the robot is ever outside this grid, we simply ignore it
       in our plots and the robot will work it's way back inside the grid
     - When driving along, we mark grid spaces corresponding to four x,y
-      points (front, left, right, back of robot) as empty
+      points (front, left, right, and back of robot) as empty
     - In general this updates 1 grid space, but it's possible that 4 
       spaces update at once if the robot is on top of 4 grid spaces
-    - When wall following we update the grid space located to the direct
-      right of the robot (where it is near the wall) as being filled
+    - When wall following we update the grid space corresponding to the right
+      edge of the robot (where it is near the wall) as being filled
     - If a space was previously marked empty, it can later be marked 
       filled, but not the other way around
-    - When a wall is encountered, we count it as previously encountered
+    - When a wall is found, we count it as previously encountered
       if the current robot grid space or the grid space directly in
       front of the robot is marked as filled
     - If we are trying to drive to a random point and encounter a known
