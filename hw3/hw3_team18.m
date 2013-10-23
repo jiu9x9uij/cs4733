@@ -7,9 +7,20 @@ function hw3_team18(serPort)
     % Create a 2-D occupancy grid for robot environment by exploring,
     % and map it out with cells that are either occupied or empty.
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%
+    %=============================================================%
+    % Clear cache & avoid NaN values                              %
+    %=============================================================%
+    clc;                                                          % Clear the cache
+    
+    % Poll for bump Sensors to avoid getting NaN values when the 
+    % robot first hits a wall
+    [~, ~, ~, ~, ~, ~] = BumpsWheelDropsSensorsRoomba(serPort);
+    %=============================================================%
     
     %% CONSTANTS %%%%%%%%%%%%%%%%%%%%%
-    gridSize = 15;                  % must be odd, this is ~10m grid
+    gridSizeWidth = 11;             % must be odd!! this is ~5m grid
+    gridSizeHeight = 17;            % must be odd!! 
     robotDiameter = .335;           % height and width of each grid square
     status = 1;                     % state machine
     done = 0;                       % whether or not the program is done 
@@ -21,15 +32,26 @@ function hw3_team18(serPort)
     maxProgramDuration = 15*60;     % max allowed duration is 15 min
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
+    %%%%%%%% REAL ROBOT %%%%%%%%%%%
+    
+    if isa(serPort,'CreateRobot')
+        %constants are fine
+    else
+        maxSpiralSpeed = .4;            % max spiral turn speed (rad/s)
+        maxFwdVel = .1;                % max speed forward (m/s)
+        spiralFwdSpeed = .2;            % fwd vel used for spiral (m/s)
+    end
+    
+    
     %% SET UP/LOOP VARIABLES %%%%%%%%%%%%%%%%%%%
-    grid = zeros(gridSize, gridSize); % 0 unknown, 1 empty, 2 filled
+    grid = zeros(gridSizeHeight, gridSizeWidth); % 0 unknown, 1 empty, 2 filled
     tStart = tic;                     % total duration marker
     timeSinceNewSquare = tic;         % time when we last changed grid
     lastHitPoint = [0,0];             % hit point for wall follow (x,y)
     pos = [0,0,0];                    % current robot pos (x,y,theta)
     goalPoint = [0,0];                % random point to go to (x,y)
     currentSpiralSpeed = .4;          % spiral needs to know current speed
-    initializePlots(gridSize, robotDiameter);
+    initializePlots(size(grid), robotDiameter);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
     %% MAIN LOOP %%%%%%%%%%%%%%%%%%%%%
@@ -40,6 +62,13 @@ function hw3_team18(serPort)
         [BumpRight, BumpLeft, BumpFront, Wall, ~, ~, ...
         ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
         ~, ~, ~, ~, ~, ~]  = AllSensorsReadRoomba(serPort);
+    
+        % handle possible NaN
+        while (isnan(BumpRight) || isnan(BumpLeft) || isnan(BumpFront))
+            [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
+                = BumpsWheelDropsSensorsRoomba(serPort);
+            Wall = WallSensorReadRoomba(serPort);
+        end
         
         % update odometry and plot position
         pos(3) = mod(pos(3) + Angle, 2*pi);
@@ -195,8 +224,8 @@ function hw3_team18(serPort)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     % draw full grid now that we're done in case it was closed mid run
-    for row = 1:gridSize;
-        for col = 1:gridSize;
+    for row = 1:gridSize(1);
+        for col = 1:gridSize(2);
             updateGrid(row, col, grid(row, col), robotDiameter, gridSize);
         end
     end
@@ -216,7 +245,7 @@ function seenBefore = seenWallBefore(grid, pos, robotDiameter)
 % Output:
 % seenBefore - true if we're current "close" to known obstacle
 
-    s = size(grid, 1);
+    s = size(grid);
     seenBefore = false;
     i = 0;
     
@@ -226,7 +255,7 @@ function seenBefore = seenWallBefore(grid, pos, robotDiameter)
         spot = [pos(1) + (robotDiameter/2)*cos(angle),...
                 pos(2) + (robotDiameter/2)*sin(angle)];
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
-        if (col > s || row > s || col == 0 || row == 0)
+        if (col > s(2) || row > s(1) || col <= 0 || row <= 0)
             % do nothing
         elseif (grid(row,col)== 2)
             seenBefore = true;
@@ -239,7 +268,7 @@ function seenBefore = seenWallBefore(grid, pos, robotDiameter)
     frontOfRobot = [pos(1) + (robotDiameter)*cos(pos(3)),...
                     pos(2) + (robotDiameter)*sin(pos(3))];
     [row,col] = translateCoordGridSpace(grid, frontOfRobot, robotDiameter);
-    if (col > s || row > s || col == 0 || row == 0)
+    if (col > s(2) || row > s(1) || col <= 0 || row <= 0)
         % do nothing
     elseif (grid(row,col) == 2)
         seenBefore = true;
@@ -261,9 +290,12 @@ function newRadsPerSecond = Spiral(currentRadsPerSecond, maxRadsPerSecond, maxFw
 
     % pause because spiral is time dependent
     pause(.1);
-    
-    % constants
     rateOfDecrease = .997;
+    if isa(serPort,'CreateRobot')
+        %constants are fine
+    else
+        rateOfDecrease = .99;
+    end
 
     % calculate spiral speeds
     newRadsPerSecond = currentRadsPerSecond * rateOfDecrease;
@@ -288,7 +320,7 @@ function [grid, marked] = markEmpty(grid, pos, robotDiameter)
 % grid - the new grid matrix
 % marked - true if grid was updated
 
-    s = size(grid, 1);
+    s = size(grid);
     marked = 0;
     i = 0;
     while (i < 4)
@@ -296,7 +328,7 @@ function [grid, marked] = markEmpty(grid, pos, robotDiameter)
         spot = [pos(1) + (robotDiameter/2)*cos(angle), ...
                 pos(2) + (robotDiameter/2)*sin(angle)];
         [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
-        if (col > s || row > s || col == 0 || row == 0)
+        if (col > s(2) || row > s(1) || col <= 0 || row <= 0)
             disp('robot in unknown area (not in grid)!');
             %return;
         else
@@ -327,7 +359,7 @@ function [grid, marked] = markFilled(grid, pos, robotDiameter, following)
 % grid - the new grid matrix
 % marked - true if grid was updated
 
-    s = size(grid, 1);
+    s = size(grid);
     marked = false;
     
     % to the right of the robot
@@ -339,7 +371,7 @@ function [grid, marked] = markFilled(grid, pos, robotDiameter, following)
     end
     
     [row, col] = translateCoordGridSpace(grid, spot, robotDiameter);
-    if (col > s || row > s || col == 0 || row == 0)
+    if (col > s(2) || row > s(1) || col <= 0 || row <= 0)
         disp('tried to access unknown part of grid!');
     else
         if (grid(row,col)~=2)
@@ -363,10 +395,12 @@ function [row, col] = translateCoordGridSpace(grid, pos, robotDiameter)
 % row - grid row number
 % col - grid column number
 
-    s = size(grid, 1);
-    offset = s/2 + 1;
-    col = floor(pos(1)/robotDiameter + offset); % x refers to column
-    row = floor(pos(2)/robotDiameter + offset); % y refers to row
+    height = size(grid,1);
+    width = size(grid,2);
+    offsetHeight = height/2 + 1;
+    offsetWidth = width/2 + 1;
+    col = floor(pos(1)/robotDiameter + offsetWidth); % x refers to column
+    row = floor(pos(2)/robotDiameter + offsetHeight); % y refers to row
     
 end
 
@@ -381,10 +415,11 @@ function spot = translateGridSpaceToCoord(grid, robotDiameter, row, col)
 %
 % Output:
 % spot - the x,y coordinates of the position to be resolved
-
-    s = size(grid, 1);
-    offset = s/2+1;
-    spot = [(col-offset)*robotDiameter, (row-offset)*robotDiameter];
+    height = size(grid,1);
+    width = size(grid,2);
+    offsetHeight = height/2 + 1;
+    offsetWidth = width/2 + 1;
+    spot = [(col-offsetWidth)*robotDiameter, (row-offsetHeight)*robotDiameter];
     
 end
 
@@ -405,7 +440,7 @@ function [spot, found] = findEmptySpot(grid, robotDiameter)
     
     % first check if any spots are unknown
     for row = 1:s(1);
-        for col = 1:s(1);
+        for col = 1:s(2);
             if (grid(row, col)==0)
                 found = true;
                 break;
@@ -441,6 +476,11 @@ function WallFollow(BumpRight, BumpLeft, BumpFront, Wall, serPort)
     % Constants
     velocity_val = 0.2;
     angular_velocity_val = 0.1;
+    if isa(serPort,'CreateRobot')
+        %constants are fine
+    else
+        velocity_val = 0.1;
+    end
     
     % Angle Velocity for different bumps
     av_bumpright =  4 * angular_velocity_val;
@@ -621,26 +661,26 @@ function initializePlots(grid_size, robot_size)
 % grid_size - number of grid squares (assume grid is square)
 % robot_size - diameter of robot (m)
 
-    size = robot_size*grid_size/2 + 1;
-
+    width = robot_size*grid_size(2)/2 + 1;
+    height = robot_size*grid_size(1)/2 + 1;
     % create position figure
     figure(1);
     hold on;
-    axis([-size size -size size]);
+    axis([-width width -height height]);
 
     % create occupancy figure
     figure(2);
     hold on;
     clf;
-    axis([-size size -size size]);
+    axis([-width width -height height]);
 
     % draw initial occupancy grid
-    for row = 1:grid_size;
-        for col = 1:grid_size;
+    for row = 1:grid_size(1);
+        for col = 1:grid_size(2);
             
             % x and y are bottom left corner of rectangle to draw
-            x = robot_size * (col - grid_size/2 - 1);
-            y = robot_size * (row - grid_size/2 - 1);
+            x = robot_size * (col - grid_size(2)/2 - 1);
+            y = robot_size * (row - grid_size(1)/2 - 1);
             
             % initially everything is unknown, so gray
             rectangle('position',  [x, y, robot_size, robot_size], ...
@@ -697,8 +737,8 @@ function updateGrid(row, col, value, robot_size, grid_size)
     end
 
     % x and y are bottom left corner of rectangle to draw
-    x = robot_size * (col - grid_size/2 - 1);
-    y = robot_size * (row - grid_size/2 - 1);
+    x = robot_size * (col - grid_size(2)/2 - 1);
+    y = robot_size * (row - grid_size(1)/2 - 1);
 
     rectangle('position',  [x, y, robot_size, robot_size], ...
               'edgecolor', [0, 0, 0], ...
