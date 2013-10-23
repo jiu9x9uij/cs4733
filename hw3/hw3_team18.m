@@ -54,6 +54,7 @@ function hw3_team18(serPort)
     initializePlots(size(grid), robotDiameter);
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         
+    
     %% MAIN LOOP %%%%%%%%%%%%%%%%%%%%%
     disp('-------- Begin Cover Algorithm --------');
     while(~done)
@@ -224,9 +225,9 @@ function hw3_team18(serPort)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     % draw full grid now that we're done in case it was closed mid run
-    for row = 1:gridSize(1);
-        for col = 1:gridSize(2);
-            updateGrid(row, col, grid(row, col), robotDiameter, gridSize);
+    for row = 1:gridSizeHeight;
+        for col = 1:gridSizeWidth;
+            updateGrid(row, col, grid(row, col), robotDiameter, size(grid));
         end
     end
     
