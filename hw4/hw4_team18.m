@@ -19,11 +19,12 @@ function hw4_team18(serPort, world_file, start_goal_file)
     plotObstacles(grown_obstacles, [0, 0, 0]); % grown obstacles in black
     
     % find path to take
-    visibility_graph = createVisibilityGraph(start, goal, obstacles);
-    shortest_path = findShortestPath(start, goal, visibility_graph);
-    
+    [verticies, edges] = createVisibilityGraphFake(start, goal, obstacles);
+    edges = addEdgeCosts(verticies, edges);
+    shortest_path = findShortestPath(verticies, edges, start, goal);
+
     % plot the paths
-    plotPaths(visibility_graph, [0 0.5 0]); % all paths in dark green
+    plotPaths(verticies, edges, [0 0.5 0]); % all paths in dark green
     plotPath(shortest_path, [0 1 0]);       % shortest path in bright green
     
 end
@@ -150,6 +151,28 @@ end
 
 %% FINDING SHORTEST PATH %%%%%%%%%%%%%%%%%%%%%
 
+function [verticies, edges] = createVisibilityGraphFake(start, goal, obstacles)
+
+    edges = zeros(0,2);
+    verticies = [goal;start];
+    
+    top_left_idx = 2;
+    bottom_right_idx = 2;
+    for i=1:length(obstacles)
+        obstacle = obstacles{i};
+        verticies = [verticies;obstacle(1,:);obstacle(length(obstacle),:)];
+        edges = [edges;[top_left_idx,size(verticies,1)-1];[bottom_right_idx,size(verticies,1)]];
+        top_left_idx = size(verticies,1)-1;
+        bottom_right_idx = size(verticies,1);
+    end
+    edges = [edges;[top_left_idx,1];[bottom_right_idx,1]];    
+    
+    verticies = [verticies;-2,1; 1,3; 3,1; 4,3];
+    s = size(verticies,1);
+    edges = [edges;[2,s-3];[s-3,s-2];[s-2,s-1];[s-1,s];[s,1]];
+    
+end
+
 function visibility_graph = createVisibilityGraph(start, goal, obstacles)
 %{
     Input. A set S of disjoint polygonal obstacles.
@@ -163,39 +186,47 @@ function visibility_graph = createVisibilityGraph(start, goal, obstacles)
         5. return G        
 %}
 
-    fake_path = [start; -2.2428,1.1882; 1,2; 3,1; 4,3; goal];
+    % add start-goal to obstacle set
+    obstacles{length(obstacles)} = [start;goal];
 
-    top_left_path = zeros(length(obstacles) + 2, 2);
-    bottom_right_path = zeros(length(obstacles) + 2, 2);
-
-    top_left_path(1,:) = start;
-    top_left_path(length(top_left_path),:) = goal;
-    bottom_right_path(1,:) = start;
-    bottom_right_path(length(bottom_right_path),:) = goal;
-    
+    % initialize g = v,e where v=all veriticies, e = empty
+    num_veriticies;
+    for i=1:length(obstacles)
+        num_verticies = num_verticies + length(obstacles{i});
+    end    
+    V = zeros(num_verticies);
     for i=1:length(obstacles)
         obstacle = obstacles{i};
-        top_left_path(i+1,:) = obstacle(1,:);
-        bottom_right_path(i+1,:) = obstacle(length(obstacle),:);
+        for j=1:length(obstacle)
+            V(j) = obstacle(j,:);
+        end
+    end
+    E = [];
+
+    % do algorithm
+    for i=1:length(V)
+        vertex = V(i);
+        visible = visibleVerticies(vertex, obstacles);
+        for j=1:length(visible)
+            E = [E;[visible(i),vertex]];
+        end
     end
     
-    visibility_graph = cell(1, 3);
-    visibility_graph{1} = fake_path;
-    visibility_graph{2} = top_left_path;
-    visibility_graph{3} = bottom_right_path;
-    
+    visibility_graph = cell(1,2);
+    visibility_graph{1} = V;
+    visibility_graph{2} = E;
 end
 
-function visibleVerticies()
+function visible = visibleVerticies(p, obstacles)
 %{
     Input. A set S of polygonal obstacles 
            and a point p that does not lie in theinterior of any obstacle.
     Output. The set of all obstacle vertices visible from p.
         1. Sort the obstacle vertices according to the clockwise angle 
            that the half-line from p to each vertex makes with the 
-           positive x-axis. In case ofties, vertices closer to p should 
+           positive x-axis. In case of ties, vertices closer to p should 
            come before vertices farther from p. 
-           Letw1,...,wn be the sorted list.
+           Let w1,...,wn be the sorted list.
         2. Let ? be the half-line parallel to the positive x-axis 
            starting at p. Findthe obstacle edges that are properly 
            intersected by ?, and store them in abalanced search tree 
@@ -209,6 +240,8 @@ function visibleVerticies()
                on thecounterclockwise side of the half-line from p to wi.
         8. return W
 %}
+
+    visible = [];
 
 end
 
@@ -232,11 +265,107 @@ function visible()
 
 end
 
-function path = findShortestPath(start, goal, visibility_graph)
+function edges_with_cost = addEdgeCosts(verticies, edges)
 
-    path = visibility_graph{1};
+    edges_with_cost = zeros(length(edges), 3);
+    for i=1:length(edges)
+        start_v = edges(i, 1);
+        end_v = edges(i, 2);
+        dist = pdist([verticies(start_v,:);verticies(end_v,:)],'euclidean');
+        edges_with_cost(i,:) = [start_v,end_v,dist];
+    end
     
 end
+
+function path = findShortestPath(verticies, edges, start, goal)
+% verticies is a list of (x, y) pairs
+% edges is a list of (vert_idx1, vert_idx2, cost)
+% start is vert_idx of start
+% goal is vert_idx of goal
+% shortest_path is list of vert_idx hops
+
+    % if start and goal are same vertex, done
+    if (start == goal)
+        path = start;
+        return;
+    end
+
+    num_verticies = length(verticies);      % number of verticies
+    settled = cell(num_verticies, 1);       % checked nodes
+    unsettled = cell(1);                    % remaining nodes
+    dist = inf(1, num_verticies);           % distance from start to vertex
+    predecessors = zeros(1, num_verticies); % link for recreating path
+
+    % convert start and goal into vertex indicies
+    start_idx = 0;
+    goal_idx = 0;
+    for i=1:num_verticies
+        if (start == verticies(i,:))
+            start_idx = i;
+        end
+        if (goal == verticies(i,:))
+            goal_idx = i;
+        end        
+    end
+    
+    % initialize
+    dist(start_idx) = 0;
+    unsettled{1} = start_idx;
+    
+    while (~isempty(unsettled))
+        
+        % get minimum unsettled
+        node = -1;
+        idx = 0;
+        for i=1:length(unsettled)
+            vertex = unsettled(i);
+            vertex = vertex{1};
+            if (node == -1 || dist(vertex) < dist(node))
+                node = vertex;
+                idx = i;
+            end
+        end
+        
+        settled{node} = 1;
+        unsettled(idx) = [];
+        for i=1:length(edges)
+            edge = edges(i,:);
+            if (edge(1) == node && isempty(settled{edge(2)}))        
+                neighbor = edge(2);                
+                newDist = dist(node) + edge(3);
+                if (dist(neighbor) > newDist)
+                    dist(neighbor) = newDist;
+                    predecessors(neighbor) = node;
+                    unsettled{length(unsettled)+1} = neighbor;
+                end
+            end
+        end
+        
+    end
+
+    % now get path from start to goal
+    if (~predecessors(goal_idx))
+        path = [];
+    else
+        shortest_path = zeros(1, num_verticies);
+        i = 1;
+        current = goal_idx;
+        while (current)
+            shortest_path(i) = current;
+            current = predecessors(current);
+            i = i+1;
+        end
+        shortest_path = fliplr(shortest_path(:,1:i-1));
+
+        path = zeros(length(shortest_path), 2);
+        for j=1:length(shortest_path)
+            path(j,:) = verticies(shortest_path(j),:);
+        end
+
+    end
+    
+end
+
 
 
 
@@ -283,10 +412,15 @@ function plotPoint(point, color)
     
 end
 
-function plotPaths(paths, color)
+function plotPaths(verticies, edges, color)
 
-    for i = 1:length(paths)
-        plotPath(paths{i}, color);
+    figure(1);
+    hold on;
+
+    for i=1:length(edges)
+        node1 = verticies(edges(i,1),:);
+        node2 = verticies(edges(i,2),:);
+        plot([node1(1);node2(1)],[node1(2);node2(2)],'Color',color);
     end
 
 end
