@@ -9,8 +9,8 @@ function hw4_team18(serPort, world_file, start_goal_file)
     % create the world
     [start, goal] = readStartGoalFromFile(start_goal_file);
     [wall, obstacles] = readWorldFromFile(world_file);
-    [grown_obstacles] = growObstacles(obstacles);
-        
+    [grown_obstacles] = growObstacles2(obstacles);
+    return;
     % plot the world
     initializePlots();
     plotPoints([start;goal], [1 0 0]);         % start and goal in red
@@ -147,6 +147,137 @@ function grown_obstacles = growObstacles(obstacles)
     
 end
 
+function grown_obstacles = growObstacles2(obstacles)
+
+    function [x0,y0] = centroid(x,y)
+        [m1,n1] = size(x);
+        n = max(m1,n1);
+        x = x(:); y = y(:);
+        x2 = [x(2:n);x(1)];
+        y2 = [y(2:n);y(1)];
+        a = 1/2*sum (x.*y2-x2.*y);
+        x0 = 1/6*sum((x.*y2-x2.*y).*(x+x2))/a;
+        y0 = 1/6*sum((x.*y2-x2.*y).*(y+y2))/a;
+    end
+
+    grown_obstacles = cell(1, length(obstacles));
+
+    for i = 1:length(obstacles)
+        
+        obstacle = obstacles{i};
+        
+        % all verticies of original and grown obstacle
+        verticies = zeros(length(obstacle)*2, 2);
+        verticies(1:length(obstacle),:) = obstacle;
+        
+        % push all points out from centroid
+        [centroid_x, centroid_y] = centroid(obstacle(:,1), obstacle(:,2));
+        for j = 1:length(obstacle)
+            new_x = obstacle(j, 1) + (obstacle(j, 1) - centroid_x)/3;
+            new_y = obstacle(j, 2) + (obstacle(j, 2) - centroid_y)/3;
+            verticies(j+length(obstacle),:) = [new_x,new_y];
+        end
+        
+        % find grown obstacle from new set of verticies
+        grown_obstacles{1,i} = computeConvexHull(verticies);
+        
+        plotPoints(obstacles{1}, 'k');
+            
+        return;
+        
+    end
+    
+end
+
+function grown_obstacle = computeConvexHull(verticies)
+
+    disp('verticies');
+    disp(verticies);
+
+    num_verticies = size(verticies, 1);
+
+    % 1. find the lowest point (rightmost tiebreaks), label it p0
+    p0 = verticies(1,:);
+    for i=2:num_verticies
+        vertex = verticies(i,:);
+        if (vertex(2) < p0(2) || (vertex(2) == p0(2) && vertex(1) > p0(1)))
+            p0 = vertex;
+        end
+    end
+
+    disp('p0');
+    disp(p0);
+
+    % 2. sort pts angularly about p0 (closeness tiebreaks), label p1..pn-1
+    sorted_points = zeros(num_verticies-1, 4);
+    idx = 1;
+    for i=1:num_verticies
+        vertex = verticies(i,:);
+        if (vertex == p0)
+            continue;
+        end
+        ang = atan2(vertex(2)-p0(2),vertex(1)-p0(1));
+        dist = pdist([p0;vertex]);
+        sorted_points(idx,:) = [vertex,ang,dist];
+        idx = idx + 1;
+    end
+    sorted_points = sortrows(sorted_points, [3, 4]); 
+
+    disp('sorted_points');
+    disp(sorted_points);
+    
+    % 3. push pn-1 and p0 onto stack
+    stack = zeros(num_verticies + 1, 2);
+    stack(1,:) = sorted_points(num_verticies-1,1:2);
+    stack(2,:) = p0;
+    stack_cur = 2;
+    
+    % 4. set i = 1
+    i = 1;
+    
+    % 5. while i < n, if pi strictly left of line formed by stack_top and
+    %    stack_top-1, push pi onto stack and increment i, else pop stack
+    while (i < num_verticies)
+        point = sorted_points(i,1:2);
+        stack_fst = stack(stack_cur,:);
+        stack_snd = stack(stack_cur-1,:);
+        
+        ang = atan2(stack_fst(2)-stack_snd(2),stack_fst(1)-stack_snd(1));
+        ang_point = atan2(point(2)-stack_snd(2),point(1)-stack_snd(1));
+        
+        % make both angles positive
+        ang = mod(ang+2*pi,2*pi);
+        ang_point = mod(ang_point+2*pi,2*pi);
+        
+        fprintf('stack: ');
+        for k=1:stack_cur
+            fprintf('(%.5f, %.5f), ', stack(stack_cur-k+1,1), stack(stack_cur-k+1,2));
+        end
+        fprintf('\n');
+        
+        fprintf('point: (%.5f, %.5f)\n', point(1), point(2));
+        fprintf('ang_cur: %.5f, ang_new %.5f\n\n', ang, ang_point);
+        
+        if (ang_point > ang)
+            stack_cur = stack_cur + 1; % push pi onto stack
+            stack(stack_cur,:) = point;
+            i = i + 1;                 % increment i
+        else
+            stack_cur = stack_cur - 1; % pop stack            
+        end
+    end
+    
+    % 6. stack contains convex hull
+    grown_obstacle = stack(2:stack_cur,:);
+    
+    disp('grown_obstacle');
+    disp(grown_obstacle);
+    
+    plotPoints(verticies, 'g');
+    plotPoints(grown_obstacle, 'r');
+            
+end
+
 
 
 %% FINDING SHORTEST PATH %%%%%%%%%%%%%%%%%%%%%
@@ -271,7 +402,7 @@ function edges_with_cost = addEdgeCosts(verticies, edges)
     for i=1:length(edges)
         start_v = edges(i, 1);
         end_v = edges(i, 2);
-        dist = pdist([verticies(start_v,:);verticies(end_v,:)],'euclidean');
+        dist = pdist([verticies(start_v,:);verticies(end_v,:)]);
         edges_with_cost(i,:) = [start_v,end_v,dist];
     end
     
@@ -433,4 +564,3 @@ function plotPath(path, color)
     plot(path(:,1),path(:,2),'Color',color);
 
 end
-
