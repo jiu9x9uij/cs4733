@@ -195,8 +195,8 @@ function grown_obstacle = computeConvexHull(verticies)
         snd = stack(stack_cur-1,:);
         
         % look at angles to determine "strictly left"
-        ang_stack = mod(atan2(top(2)-snd(2),top(1)-snd(1)), 2*pi);
-        ang_point = mod(atan2(point(2)-snd(2),point(1)-snd(1)), 2*pi);
+        ang_stack = atan2(top(2)-snd(2),top(1)-snd(1));
+        ang_point = atan2(point(2)-snd(2),point(1)-snd(1));
         ang_diff = mod(ang_point - ang_stack, 2*pi);
 
         if (ang_diff > 0 && ang_diff < pi)
