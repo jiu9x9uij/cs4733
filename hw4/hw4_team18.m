@@ -6,10 +6,16 @@
 
 function hw4_team18(serPort, world_file, start_goal_file)
 
+    % constants
+    robot_num_verts = 20;
+    robot_mult = 1.1;
+    robot_radius = 0.1675;
+
     % create the world
     [start, goal] = readStartGoalFromFile(start_goal_file);
     [wall, obstacles] = readWorldFromFile(world_file);
-    [grown_obstacles] = growObstacles(obstacles);
+    robot_pts = buildRobot(robot_radius*robot_mult, robot_num_verts);
+    grown_obstacles = growObstacles(obstacles, robot_pts);
 
     % plot the world
     initializePlots();
@@ -110,42 +116,60 @@ function [start, goal] = readStartGoalFromFile(file)
 
 end
 
-function grown_obstacles = growObstacles(obstacles)
+function robot_pts = buildRobot(radius, num_verticies)
 
-    function [x0,y0] = centroid(x,y)
-        [m1,n1] = size(x);
-        n = max(m1,n1);
-        x = x(:); y = y(:);
-        x2 = [x(2:n);x(1)];
-        y2 = [y(2:n);y(1)];
-        a = 1/2*sum (x.*y2-x2.*y);
-        x0 = 1/6*sum((x.*y2-x2.*y).*(x+x2))/a;
-        y0 = 1/6*sum((x.*y2-x2.*y).*(y+y2))/a;
+    degree = 2*pi/num_verticies;
+    
+    robot_pts = zeros(num_verticies, 2);
+    for i=1:num_verticies
+        ang = (i-1)*degree;
+        robot_pts(i,:) = [radius*cos(ang),radius*sin(ang)];
     end
 
-    grown_obstacles = cell(1, length(obstacles));
+end
 
-    for i = 1:length(obstacles)
-        
-        obstacle = obstacles{i};
-        
-        % all verticies of original and grown obstacle
-        verticies = zeros(length(obstacle)*2, 2);
-        verticies(1:length(obstacle),:) = obstacle;
-        
-        % push all points out from centroid
-        [centroid_x, centroid_y] = centroid(obstacle(:,1), obstacle(:,2));
-        for j = 1:length(obstacle)
-            new_x = obstacle(j, 1) + (obstacle(j, 1) - centroid_x)/3;
-            new_y = obstacle(j, 2) + (obstacle(j, 2) - centroid_y)/3;
-            verticies(j+length(obstacle),:) = [new_x,new_y];
-        end
-        
-        % find grown obstacle from new set of verticies
-        grown_obstacles{1,i} = computeConvexHull(verticies);
-        
+
+%% GROW OBSTACLES %%%%%%%%%%%%%%%%%%%%%
+
+function grown_obstacles = growObstacles(obstacles, robot_pts)
+
+    num_robot_pts = size(robot_pts,1);
+    num_obstacles = size(obstacles,2);
+
+    % "reflect" robot
+    reference_point = robot_pts(1,:);
+    for i=1:num_robot_pts
+        robot_pts(i,:) = reference_point - robot_pts(i,:);
     end
     
+    grown_obstacles = cell(1, num_obstacles);
+
+    for i = 1:num_obstacles
+        % grow verticies
+        verticies = growVerticies(obstacles{i}, robot_pts);
+
+        % grown obstacle is convex hull of new set of verticies
+        grown_obstacles{1,i} = computeConvexHull(verticies);
+    end
+    
+end
+
+function verticies = growVerticies(obstacle, robot_pts)
+
+    num_robot_pts = size(robot_pts,1);
+    num_obs_verts = size(obstacle,1);
+
+    % now stick reference point at every vertex, and grab set of all 
+    verticies = zeros(num_robot_pts*num_obs_verts, 2);
+    for i=1:num_obs_verts
+        for j=1:num_robot_pts
+            verticies((i-1)*num_robot_pts+j,:) = obstacle(i,:)+robot_pts(j,:);
+        end
+    end
+    
+    % remove any dup verticies
+    verticies = unique(verticies, 'rows');
+
 end
 
 function grown_obstacle = computeConvexHull(verticies)
