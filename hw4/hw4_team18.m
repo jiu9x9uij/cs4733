@@ -7,8 +7,8 @@
 function hw4_team18(serPort, world_file, start_goal_file)
 
     % constants
-    robot_num_verts = 20;
-    robot_mult = 1.1;
+    robot_num_verts = 4;
+    robot_mult = .7;
     robot_radius = 0.1675;
 
     % create the world
@@ -29,6 +29,8 @@ function hw4_team18(serPort, world_file, start_goal_file)
     edges = addEdgeCosts(verticies, edges);
     shortest_path = findShortestPath(verticies, edges, start, goal);
 
+    disp(shortest_path);
+    
     % plot the paths
     plotPaths(verticies, edges, [0 0.5 0]); % all paths in dark green
     plotPath(shortest_path, [0 1 0]);       % shortest path in bright green
@@ -127,6 +129,7 @@ function robot_pts = buildRobot(radius, num_verticies)
     end
 
 end
+
 
 
 %% GROW OBSTACLES %%%%%%%%%%%%%%%%%%%%%
@@ -263,96 +266,90 @@ function [verticies, edges] = createVisibilityGraphFake(start, goal, obstacles)
     
 end
 
-function visibility_graph = createVisibilityGraph(start, goal, obstacles)
-%{
-    Input. A set S of disjoint polygonal obstacles.
-    Output. The visibility graph Gvis(S).
-        1. Initialize a graph G = (V,E) 
-           where V is the set of all vertices of thepolygons in S 
-           and E = /0.
-        2. for all vertices v ? V
-        3.     W ? VISIBLEVERTICES(v,S)
-        4.     For every vertex w ? W, add the arc (v,w) to E.
-        5. return G        
-%}
+function [verticies, edges] = createVisibilityGraph(start, goal, obstacles)
 
-    % add start-goal to obstacle set
-    obstacles{length(obstacles)} = [start;goal];
+    num_obs = size(obstacles,2);
 
-    % initialize g = v,e where v=all veriticies, e = empty
-    num_veriticies;
-    for i=1:length(obstacles)
-        num_verticies = num_verticies + length(obstacles{i});
-    end    
-    V = zeros(num_verticies);
-    for i=1:length(obstacles)
-        obstacle = obstacles{i};
-        for j=1:length(obstacle)
-            V(j) = obstacle(j,:);
-        end
+    num_verts = 2;
+    for i=1:num_obs
+        num_verts = num_verts + size(obstacles{i},1);
     end
-    E = [];
+    
+    verticies = zeros(num_verts,2);
+    verticies(1,:) = start;
+    verticies(2,:) = goal;
 
-    % do algorithm
-    for i=1:length(V)
-        vertex = V(i);
-        visible = visibleVerticies(vertex, obstacles);
-        for j=1:length(visible)
-            E = [E;[visible(i),vertex]];
+    obs_edges = cell(1,num_obs*3);
+    
+    idx = 2;
+    for i=1:num_obs
+        obstacle = obstacles{i};
+        for j=1:size(obstacle,1)
+            idx = idx+1;
+            verticies(idx,:) = obstacle(j,:);
+            obs_edges{idx-2} = [idx,idx+1];
+        end
+        obs_edges{idx-2} = [idx,1];
+    end
+
+    all_edges = zeros(num_verts*(num_verts-1)/2,2);
+    edges = zeros(num_verts*(num_verts-1)/2,2);
+    
+    idx = 0;
+    for i=1:num_verts
+        for j=i+1:num_verts
+            idx = idx+1;
+            all_edges(idx,:) = [i,j];
         end
     end
     
-    visibility_graph = cell(1,2);
-    visibility_graph{1} = V;
-    visibility_graph{2} = E;
-end
+    num_obs_edges = size(obs_edges,2);
 
-function visible = visibleVerticies(p, obstacles)
-%{
-    Input. A set S of polygonal obstacles 
-           and a point p that does not lie in theinterior of any obstacle.
-    Output. The set of all obstacle vertices visible from p.
-        1. Sort the obstacle vertices according to the clockwise angle 
-           that the half-line from p to each vertex makes with the 
-           positive x-axis. In case of ties, vertices closer to p should 
-           come before vertices farther from p. 
-           Let w1,...,wn be the sorted list.
-        2. Let ? be the half-line parallel to the positive x-axis 
-           starting at p. Findthe obstacle edges that are properly 
-           intersected by ?, and store them in abalanced search tree 
-           T in the order in which they are intersected by ?.
-        3. W ? /0
-        4. for i ? 1 to n
-        5.     if VISIBLE(wi) then Add wi to W.
-        6.     Insert into T the obstacle edges incident to wi that lie on 
-               the clock-wise side of the half-line from p to wi.
-        7.     Delete from T the obstacle edges incident to wi that lie 
-               on thecounterclockwise side of the half-line from p to wi.
-        8. return W
-%}
-
-    visible = [];
-
-end
-
-function visible()
-%{
-    1. if pwi intersects the interior of the obstacle of which wi 
-       is a vertex, locally at wi
-    2.     return false
-    3. else if i = 1 or wi-?1 is not on the segment pwi
-    4.     Search in T for the edge e in the leftmost leaf.
-    5.     if e exists and pwi intersects e
-    6.         return false
-    7.     else return true
-    8. else if wi-?1 is not visible
-    9.     return false
-    10. else Search in T for an edge e that intersects wi?1wi.
-    11.     if e exists
-    12.         return false
-    13.     else return true
-%}
-
+    % helper functions
+    slope = @(line) (line(2,2) - line(1,2))/(line(2,1) - line(1,1));
+    intercept = @(line,m) line(1,2) - m*line(1,1);
+    isPointInside = @(xint,myline) ...
+        (xint >= myline(1,1) && xint <= myline(2,1)) || ...
+        (xint >= myline(2,1) && xint <= myline(1,1));
+    
+    for i=1:size(all_edges,1)
+        edge_pt1 = verticies(all_edges(i,1),:);
+        edge_pt2 = verticies(all_edges(i,2),:);
+        
+        intersects_any = false;
+        
+        for j=1:num_obs_edges
+            obs_edge = obs_edges{j};
+            obs_pt1 = verticies(obs_edge(1),:);
+            obs_pt2 = verticies(obs_edge(2),:);
+            
+            % http://blogs.mathworks.com/loren/2011/08/29/intersecting-lines/
+            line1 = [edge_pt1; edge_pt2];
+            line2 = [obs_pt1; obs_pt2];
+            m1 = slope(line1);
+            m2 = slope(line2);
+            
+            % if segments are parallel, not intersecting
+            if (abs(m1-m2) < eps(m1))
+                continue;
+            end
+            
+            xint = (intercept(line2,m2)-intercept(line1,m1))/(m1-m2);
+            if (isPointInside(xint,line1) && isPointInside(xint,line2))
+                intersects_any = true;
+                break;
+            end
+        end
+        
+        % keep edge if it doesnt intersects
+        if (~intersects_any)
+            edges(i,:) = all_edges(i,:);
+        end
+    end
+    
+    % remove empty rows
+    edges = edges(any(edges,2),:);
+    
 end
 
 function edges_with_cost = addEdgeCosts(verticies, edges)
@@ -397,6 +394,8 @@ function path = findShortestPath(verticies, edges, start, goal)
             goal_idx = i;
         end        
     end
+    
+    disp(start_idx); disp(goal_idx);
     
     % initialize
     dist(start_idx) = 0;
@@ -455,7 +454,6 @@ function path = findShortestPath(verticies, edges, start, goal)
     end
     
 end
-
 
 
 
