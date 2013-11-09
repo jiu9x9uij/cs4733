@@ -25,12 +25,9 @@ function hw4_team18(serPort, world_file, start_goal_file)
     plotObstacles(grown_obstacles, [0, 0, 0]); % grown obstacles in black
     
     % find path to take
-    [verticies, edges] = createVisibilityGraphFake(start, goal, grown_obstacles);
-    edges = addEdgeCosts(verticies, edges);
+    [verticies, edges] = createVisibilityGraph(start, goal, grown_obstacles, wall);
     shortest_path = findShortestPath(verticies, edges, start, goal);
 
-    disp(shortest_path);
-    
     % plot the paths
     plotPaths(verticies, edges, [0 0.5 0]); % all paths in dark green
     plotPath(shortest_path, [0 1 0]);       % shortest path in bright green
@@ -244,29 +241,7 @@ end
 
 %% FINDING SHORTEST PATH %%%%%%%%%%%%%%%%%%%%%
 
-function [verticies, edges] = createVisibilityGraphFake(start, goal, obstacles)
-
-    edges = zeros(0,2);
-    verticies = [goal;start];
-    
-    top_left_idx = 2;
-    bottom_right_idx = 2;
-    for i=1:length(obstacles)
-        obstacle = obstacles{i};
-        verticies = [verticies;obstacle(1,:);obstacle(length(obstacle),:)];
-        edges = [edges;[top_left_idx,size(verticies,1)-1];[bottom_right_idx,size(verticies,1)]];
-        top_left_idx = size(verticies,1)-1;
-        bottom_right_idx = size(verticies,1);
-    end
-    edges = [edges;[top_left_idx,1];[bottom_right_idx,1]];    
-    
-    verticies = [verticies;-2,1; 1,3; 3,1; 4,3];
-    s = size(verticies,1);
-    edges = [edges;[2,s-3];[s-3,s-2];[s-2,s-1];[s-1,s];[s,1]];
-    
-end
-
-function [verticies, edges] = createVisibilityGraph(start, goal, obstacles)
+function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall)
 
     num_obs = size(obstacles,2);
 
@@ -279,89 +254,132 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles)
     verticies(1,:) = start;
     verticies(2,:) = goal;
 
-    obs_edges = cell(1,num_obs*3);
+    intra_obs_edges = zeros(num_verts, num_verts);
     
     idx = 2;
     for i=1:num_obs
         obstacle = obstacles{i};
+        first_idx = idx+1;
         for j=1:size(obstacle,1)
             idx = idx+1;
             verticies(idx,:) = obstacle(j,:);
-            obs_edges{idx-2} = [idx,idx+1];
         end
-        obs_edges{idx-2} = [idx,1];
+        for k=first_idx:idx
+            for l=k+2:idx
+                intra_obs_edges(k,l) = 1;
+            end
+        end
+        intra_obs_edges(first_idx, idx) = 0;
     end
-
-    all_edges = zeros(num_verts*(num_verts-1)/2,2);
-    edges = zeros(num_verts*(num_verts-1)/2,2);
     
+    edges = zeros(num_verts*(num_verts-1)/2,3);
     idx = 0;
     for i=1:num_verts
+        p1 = verticies(i,:);
+        
+        % TODO if p1 is inside any obstacle, skip it
+        
         for j=i+1:num_verts
-            idx = idx+1;
-            all_edges(idx,:) = [i,j];
-        end
-    end
-    
-    num_obs_edges = size(obs_edges,2);
-
-    % helper functions
-    slope = @(line) (line(2,2) - line(1,2))/(line(2,1) - line(1,1));
-    intercept = @(line,m) line(1,2) - m*line(1,1);
-    isPointInside = @(xint,myline) ...
-        (xint >= myline(1,1) && xint <= myline(2,1)) || ...
-        (xint >= myline(2,1) && xint <= myline(1,1));
-    
-    for i=1:size(all_edges,1)
-        edge_pt1 = verticies(all_edges(i,1),:);
-        edge_pt2 = verticies(all_edges(i,2),:);
-        
-        intersects_any = false;
-        
-        for j=1:num_obs_edges
-            obs_edge = obs_edges{j};
-            obs_pt1 = verticies(obs_edge(1),:);
-            obs_pt2 = verticies(obs_edge(2),:);
-            
-            % http://blogs.mathworks.com/loren/2011/08/29/intersecting-lines/
-            line1 = [edge_pt1; edge_pt2];
-            line2 = [obs_pt1; obs_pt2];
-            m1 = slope(line1);
-            m2 = slope(line2);
-            
-            % if segments are parallel, not intersecting
-            if (abs(m1-m2) < eps(m1))
+            p2 = verticies(j,:);
+          
+            if (intra_obs_edges(i,j))
                 continue;
             end
             
-            xint = (intercept(line2,m2)-intercept(line1,m1))/(m1-m2);
-            if (isPointInside(xint,line1) && isPointInside(xint,line2))
-                intersects_any = true;
-                break;
+            valid = true;
+            
+            for k=1:num_obs
+                if (intersectsObstacle(p1, p2, obstacles{k}))
+                    valid = false;
+                    break;
+                end
+            end
+            
+            if (valid && ~intersectsObstacle(p1, p2, wall))
+                idx = idx+1;
+                edges(idx,:) = [i,j,pdist([p1;p2])];
             end
         end
-        
-        % keep edge if it doesnt intersects
-        if (~intersects_any)
-            edges(i,:) = all_edges(i,:);
-        end
     end
-    
+      
     % remove empty rows
     edges = edges(any(edges,2),:);
-    
 end
 
-function edges_with_cost = addEdgeCosts(verticies, edges)
+function [p, intersects] = intersectLines(p1, p2, p3, p4)
+    t1 = p1(1) - p2(1);
+    t2 = p3(1) - p4(1);
+    t3 = p1(2) - p2(2);
+    t4 = p3(2) - p4(2);
+    t5 = p1(1)*p2(2) - p1(2)*p2(1);
+    t6 = p3(1)*p4(2) - p3(2)*p4(1);
+    t7 = t1*t4 - t3*t2;
+    
+    p = [(t5*t2 - t1*t6)/t7, (t5*t4 - t3*t6)/t7];
+    intersects = t7 ~= 0;
+end
 
-    edges_with_cost = zeros(length(edges), 3);
-    for i=1:length(edges)
-        start_v = edges(i, 1);
-        end_v = edges(i, 2);
-        dist = pdist([verticies(start_v,:);verticies(end_v,:)]);
-        edges_with_cost(i,:) = [start_v,end_v,dist];
+function [p, intersects] = intersectSegments(p1, p2, p3, p4)
+    
+    if (isequal(p1, p3) || isequal(p1, p4))
+        intersects = true;
+        p = p1;
+        return;
     end
     
+    if (isequal(p2, p3) || isequal(p2, p4))
+        intersects = true;
+        p = p2;
+        return;
+    end
+
+    [p, intersects] = intersectLines(p1, p2, p3, p4);
+
+    if (intersects)
+        d1 = pdist([p1;p2]);
+        d2 = pdist([p3;p4]);
+
+        if (d1 < pdist([p;p1]) || d1 < pdist([p;p2]) || ...
+            d2 < pdist([p;p3]) || d2 < pdist([p;p4]))
+            intersects = false;
+        end
+    end
+end
+
+function intersects = intersectsObstacle(p1, p2, obstacle)
+
+    for j=1:size(obstacle,1)-1
+        obs1 = obstacle(j,:);
+        obs2 = obstacle(j+1,:);
+        
+        % can move along edge
+        if ((isequal(p1, obs1) && isequal(p2, obs2)) ||...
+            (isequal(p1, obs2) && isequal(p2, obs1)))
+            intersects = false;
+            return;
+        end
+        
+        [p, intersects] = intersectSegments(p1, p2, obs1, obs2);
+        
+        if (intersects && ~isequal(p, p1) && ~isequal(p, p2))
+            return;
+        end
+    end
+   
+    obs1 = obstacle(1,:);
+    obs2 = obstacle(size(obstacle,1),:);
+    if ((isequal(p1, obs1) && isequal(p2, obs2)) ||...
+        (isequal(p1, obs2) && isequal(p2, obs1)))
+        intersects = false;
+        return;
+    end
+    [p, intersects] = intersectSegments(p1, p2, obs1, obs2);
+    if (intersects && ~isequal(p, p1) && ~isequal(p, p2))
+        return;
+    end
+
+    intersects = false;     
+
 end
 
 function path = findShortestPath(verticies, edges, start, goal)
@@ -395,8 +413,6 @@ function path = findShortestPath(verticies, edges, start, goal)
         end        
     end
     
-    disp(start_idx); disp(goal_idx);
-    
     % initialize
     dist(start_idx) = 0;
     unsettled{1} = start_idx;
@@ -419,8 +435,18 @@ function path = findShortestPath(verticies, edges, start, goal)
         unsettled(idx) = [];
         for i=1:length(edges)
             edge = edges(i,:);
+            % check edge one way
             if (edge(1) == node && isempty(settled{edge(2)}))        
                 neighbor = edge(2);                
+                newDist = dist(node) + edge(3);
+                if (dist(neighbor) > newDist)
+                    dist(neighbor) = newDist;
+                    predecessors(neighbor) = node;
+                    unsettled{length(unsettled)+1} = neighbor;
+                end
+            % check edge other way
+            elseif (edge(2) == node && isempty(settled{edge(1)}))        
+                neighbor = edge(1);                
                 newDist = dist(node) + edge(3);
                 if (dist(neighbor) > newDist)
                     dist(neighbor) = newDist;
