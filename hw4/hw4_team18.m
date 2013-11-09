@@ -283,6 +283,9 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall
                 break;
             end
         end
+        if (~inside_obstacle(i))
+            inside_obstacle(i) = ~insideObstacle(p1, wall);
+        end
     end
 
     edges = zeros(num_verts*(num_verts-1)/2,3);
@@ -311,7 +314,7 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall
                 end
             end
             
-            if (~intersects_obs && ~intersectsObstacle(p1, p2, wall))
+            if (~intersects_obs)
                 idx = idx+1;
                 edges(idx,:) = [i,j,pdist([p1;p2])];
             end
