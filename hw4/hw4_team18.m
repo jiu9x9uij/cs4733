@@ -8,7 +8,7 @@ function hw4_team18(serPort, world_file, start_goal_file)
 
     % constants
     robot_num_verts = 4;
-    robot_mult = .7;
+    robot_mult = 1.1;
     robot_radius = 0.1675;
 
     % create the world
@@ -172,6 +172,7 @@ function verticies = growVerticies(obstacle, robot_pts)
 
 end
 
+% TODO matlab has this built in: convhull(verticies(1:,),verticies(2,:))
 function grown_obstacle = computeConvexHull(verticies)
 
     num_verticies = size(verticies, 1);
@@ -239,7 +240,7 @@ end
 
 
 
-%% FINDING SHORTEST PATH %%%%%%%%%%%%%%%%%%%%%
+%% VISIBILITY GRAPH %%%%%%%%%%%%%%%%%%%%%
 
 function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall)
 
@@ -272,30 +273,45 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall
         intra_obs_edges(first_idx, idx) = 0;
     end
     
+    inside_obstacle = zeros(1,num_verts);
+    for i=1:num_verts
+        p1 = verticies(i,:);
+        inside_obstacle(i) = 0;
+        for k=1:num_obs
+            if (insideObstacle(p1, obstacles{k}))
+                inside_obstacle(i) = 1;
+                break;
+            end
+        end
+    end
+
     edges = zeros(num_verts*(num_verts-1)/2,3);
     idx = 0;
     for i=1:num_verts
+
+        if (inside_obstacle(i))
+            continue;
+        end
+        
         p1 = verticies(i,:);
         
-        % TODO if p1 is inside any obstacle, skip it
-        
         for j=i+1:num_verts
-            p2 = verticies(j,:);
-          
-            if (intra_obs_edges(i,j))
+            
+            if (inside_obstacle(j) || intra_obs_edges(i,j))
                 continue;
             end
-            
-            valid = true;
-            
+
+            p2 = verticies(j,:);
+          
+            intersects_obs = false;
             for k=1:num_obs
                 if (intersectsObstacle(p1, p2, obstacles{k}))
-                    valid = false;
+                    intersects_obs = true;
                     break;
                 end
             end
             
-            if (valid && ~intersectsObstacle(p1, p2, wall))
+            if (~intersects_obs && ~intersectsObstacle(p1, p2, wall))
                 idx = idx+1;
                 edges(idx,:) = [i,j,pdist([p1;p2])];
             end
@@ -381,6 +397,18 @@ function intersects = intersectsObstacle(p1, p2, obstacle)
     intersects = false;     
 
 end
+
+function inside = insideObstacle(p1, obstacle)
+
+    [in, on] = inpolygon(p1(1),p1(2),obstacle(:,1),obstacle(:,2));
+
+    inside = in && ~on;
+
+end
+
+
+
+%% DIJKSTRA %%%%%%%%%%%%%%%%%%%%%
 
 function path = findShortestPath(verticies, edges, start, goal)
 % verticies is a list of (x, y) pairs
@@ -547,3 +575,5 @@ function plotPath(path, color)
     plot(path(:,1),path(:,2),'Color',color);
 
 end
+
+
