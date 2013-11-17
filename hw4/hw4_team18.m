@@ -155,6 +155,17 @@ function grown_obstacles = growObstacles(obstacles, robot_pts)
     
 end
 
+%{
+for 1= 1:size(obstacles,2)
+    obstacle = obstacles{i};
+    for j=1:size(obstacle,1)
+        vertex = obstacle(j,:);
+        x = vertex(1);
+        y = vertex(2);
+    end
+end
+%}
+
 function verticies = growVerticies(obstacle, robot_pts)
 
     num_robot_pts = size(robot_pts,1);
