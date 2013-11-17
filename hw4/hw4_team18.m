@@ -19,7 +19,8 @@ function hw4_team18(serPort, world_file, start_goal_file)
 
     % plot the world
     initializePlots();
-    plotPoints([start;goal], [1 0 0]);         % start and goal in red
+    plotPoint(start, [1 0 0]);                 % start in red
+    plotPoint(goal, [0 0 1]);                  % goal in blue
     plotObstacle(wall, [0 0 0.5]);             % wall in dark blue
     plotObstacles(obstacles, [0 0.4 1]);       % obstacles in blue
     plotObstacles(grown_obstacles, [0, 0, 0]); % grown obstacles in black
@@ -30,7 +31,7 @@ function hw4_team18(serPort, world_file, start_goal_file)
 
     % plot the paths
     plotPaths(verticies, edges, [0 0.5 0]); % all paths in dark green
-    plotPath(shortest_path, [0 1 0]);       % shortest path in bright green
+    plotPath(shortest_path, [1 0 0], 2);    % shortest path in red
     
 end
 
@@ -172,7 +173,6 @@ function verticies = growVerticies(obstacle, robot_pts)
 
 end
 
-% TODO matlab has this built in: convhull(verticies(1:,),verticies(2,:))
 function grown_obstacle = computeConvexHull(verticies)
 
     num_verticies = size(verticies, 1);
@@ -302,7 +302,7 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall
             end
 
             p2 = verticies(j,:);
-          
+            
             intersects_obs = false;
             for k=1:num_obs
                 if (intersectsObstacle(p1, p2, obstacles{k}))
@@ -355,8 +355,9 @@ function [p, intersects] = intersectSegments(p1, p2, p3, p4)
         d1 = pdist([p1;p2]);
         d2 = pdist([p3;p4]);
 
-        if (d1 < pdist([p;p1]) || d1 < pdist([p;p2]) || ...
-            d2 < pdist([p;p3]) || d2 < pdist([p;p4]))
+        % use eps to account for floating point rounding errors
+        if (pdist([p;p1]) - d1 > eps || pdist([p;p2]) - d1 > eps || ...
+            pdist([p;p3]) - d2 > eps || pdist([p;p4]) - d2 > eps)
             intersects = false;
         end
     end
@@ -536,14 +537,6 @@ function plotObstacle(obstacle, color)
         color,'FaceColor','none','EdgeColor',color,'LineWidth',2);    
 end
 
-function plotPoints(points, color)
-
-    for i = 1:length(points)
-        plotPoint(points(i,:), color);
-    end
-    
-end
-
 function plotPoint(point, color)
 
     figure(1);
@@ -567,13 +560,12 @@ function plotPaths(verticies, edges, color)
 
 end
 
-function plotPath(path, color)
+function plotPath(path, color, lineWidth)
 
     figure(1);
     hold on;
     
-    plot(path(:,1),path(:,2),'Color',color);
+    plot(path(:,1),path(:,2),'Color',color,'LineWidth',lineWidth);
 
 end
-
 
