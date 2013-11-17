@@ -39,38 +39,10 @@ function runRobot(serPort) % add points back soon!
 
     turnSpeed = .5; % in rads/s
     fwdSpeed = .4; % in m/s
-    turnRadius = (fwdSpeed * ((2*pi)/turnSpeed))/pi/2;
+    turnFwdSpeed = .15; % in rads/s
+    turnRadius = (turnFwdSpeed * ((2*pi)/turnSpeed))/pi/2;
+    tStart = tic; %for keeping track of time
 
-    % we can break this up into a series of distances and angles
-    % the distances represent driving straight, the angles are
-    % using our "standard" turn radius which can be set
-    % depending on our turn radius, the distances changes
-
-    %% so we walk through the group, 3 points at a time
-    dataMatrix = zeros(size(points,1)-2, 2);
-    count = 1;
-    recentLeaveDist = 0;
-    for i=3:size(points, 1)
-
-        A = points(i-2,:);
-        B = points(i-1,:);
-        C = points(i,:);
-
-
-        myangle = computeAngleBetweenPoints(A,B,C);
-        dataMatrix(count, 2) = myangle;
-
-        mydist = pdist([A(1),A(2);B(1),B(2)], 'euclidean'); 
-        leaveDist = computeLeaveLineDist(myangle,turnRadius);
-        mydist = mydist - leaveDist - recentLeaveDist;
-        recentLeaveDist = leaveDist;
-
-        dataMatrix(count,1) = mydist;
-        count = count + 1;
-    end
-
-    disp(dataMatrix);
-    %disp('woot!');
 
     %%NOW WE BEGIN ACTUALLY MOVING THE ROBO
 
@@ -85,12 +57,15 @@ function runRobot(serPort) % add points back soon!
     status = 1; % drivin straight
     currentStraightDist = 0;
     currentDeltaAngle = 0;
-    idx = 1;
+    idx = 3;
+    recentLeaveDist = 0;
+    
+    %%first calculation
+    [data, recentLeaveDist] = computeDistAndAngle(points(idx-2,:), points(idx-1,:), points(idx,:), recentLeaveDist, turnRadius);
     
     %%begin main loop
     while(~atgoal)
-        
-        data = dataMatrix(idx,:);
+
         
         % read all the sensors at once
         [BumpRight, BumpLeft, BumpFront, Wall, ~, ~, ...
@@ -110,9 +85,11 @@ function runRobot(serPort) % add points back soon!
         pos(2) = pos(2) + Dist * sin(pos(3));
         
         
+        
         switch status
+                
             case 1 % driving straight
-                disp('driving straight!');
+                %disp('driving straight!');
                 SetFwdVelAngVelCreate(serPort,fwdSpeed,0);
                 
                 currentStraightDist = currentStraightDist + Dist;
@@ -120,34 +97,74 @@ function runRobot(serPort) % add points back soon!
                 if(currentStraightDist >= data(1))
                    currentStraightDist = 0;
                    status = 2;
+                   disp('CHANGE TO STATE 2');
                 end
                 
             case 2 % turning
-                disp('turning!');
+                %disp('turning!');
                 if(data(2) > 0)
-                    SetFwdVelAngVelCreate(serPort,fwdSpeed,turnSpeed);
+                    %disp('positive angle');
+                    SetFwdVelAngVelCreate(serPort,turnFwdSpeed,turnSpeed);
                 else
-                    SetFwdVelAngVelCreate(serPort,fwdSpeed,-turnSpeed);
+                    %disp('negative angle');
+                    SetFwdVelAngVelCreate(serPort,turnFwdSpeed,-turnSpeed);
                 end
                 
                 currentDeltaAngle = currentDeltaAngle + Angle;
                 if(abs(currentDeltaAngle) >= abs(data(2) * (pi/180)))
-                    %when i'm done turning, calc next data
-                    % for now we can ++ idx
                     currentDeltaAngle = 0;
                     idx = idx + 1;
-                    status = 1;
+                    if(idx > size(points,1))
+                        status = 3;
+                        data(1) = getDistance(pos,qGoal);
+                        disp('CHANGE TO STATE 3');
+                    else
+                        % calculate data with current pos as first point
+                        [data, recentLeaveDist] = computeDistAndAngle(pos, points(idx-1,:), points(idx,:), recentLeaveDist, turnRadius);
+                        status = 1;
+                        disp('CHANGE TO STATE 1');
+                        disp('DATA: ');
+                        disp(data);
+                    end
+                end
+            case 3 %driving straight but to the goal
+                SetFwdVelAngVelCreate(serPort,fwdSpeed,0);
+                currentStraightDist = currentStraightDist + Dist;
+                %might as well limit our distance
+                if(currentStraightDist >= data(1))
+                   atgoal = true; 
                 end
         end
-       
-        
-        
-        %atgoal = atPoint(pos, qGoal, duration)
-        drawnow;
+        if(~atgoal) %because we might have set it in case 3 for safety
+            %atgoal = atPoint(pos, qGoal, toc(tStart));
+        end
+        printPosition(pos);
+        %drawnow;
     end
     
+    disp('DONE YES WE BE DONE YO');
     
     
+end
+
+
+function [data, newRecentLeave] = computeDistAndAngle(A, B, C, recentLeaveDist, turnRadius)
+    % we can break this up into a series of distances and angles
+    % the distances represent driving straight, the angles are
+    % using our "standard" turn radius which can be set
+    % depending on our turn radius, the distances changes
+
+    data = zeros(1,2);
+
+    myangle = computeAngleBetweenPoints(A,B,C);
+    data(2) = myangle;
+
+    mydist = getDistance(A,B);
+    leaveDist = computeLeaveLineDist(myangle,turnRadius);
+    mydist = mydist - leaveDist - recentLeaveDist;
+    newRecentLeave = leaveDist;
+
+    data(1) = mydist;
 end
 
 
@@ -155,17 +172,27 @@ function angle = computeAngleBetweenPoints(A, B, C)
     
     ABrise = B(2)-A(2);
     ABrun = B(1)-A(1);
-    ABangle = atand(ABrise/ABrun);
+    ABangle = atan2d(ABrise,ABrun);
+    disp('AB ANGLE');
+    disp(ABangle);
     
     BCrise = C(2)-B(2);
     BCrun = C(1)-B(1);
-    BCangle = atand(BCrise/BCrun);
-    
+    BCangle = atan2d(BCrise,BCrun);
+    disp('BC ANGLE');
+    disp(BCangle);
     
     angle = BCangle-ABangle;
+    if(angle > 180)
+       angle = 180 - angle; 
+    elseif(angle < -180)
+        angle = 360 + angle;
+    end
+    disp('FINAL ANGLE');
+    disp(angle);
+    
 
 end
-
 
 function dist = computeLeaveLineDist(angle, radius)
     angle = abs(angle/2);
@@ -269,4 +296,41 @@ function angTurned = turnRadians(serPort, angToTurn)
     % reset angle sensor and update angle
     angTurned = angTurned + AngleSensorRoomba(serPort);
     
+end
+
+function dist = getDistance(point1, point2)
+% Euclidean distance between two points.
+%
+% Input:
+% point1 - first point (x,y)
+% point2 - second point (x,y)
+%
+% Output:
+% dist - distnace between points (m)
+
+    dist = pdist([point1(1),point1(2);point2(1),point2(2)], 'euclidean'); 
+
+end
+
+function printPosition(pos)
+% Displays x,y,theta position in readible format.
+% Also plots the position in blue and orientation in green.
+%
+% Input:
+% pos - Position to display
+    figure(1); % draw odometry on new plot
+    hold on;   % draw all points on the new plot
+
+    %fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
+    
+    % plot position
+    plot(pos(1), pos(2), 'b.');
+    
+    % plot orientation
+    dispOrientation = 0.25;
+    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
+         [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
+    
+    drawnow;
+     
 end
