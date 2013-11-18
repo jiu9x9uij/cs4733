@@ -4,17 +4,6 @@ function runRobot(serPort) % add points back soon!
 % first row is current point
 % following rows are points to go to, in order
 % last row is goal point
-% EXAMPLE:
-%{
-    points = [
-       -3.1070  ,  0.5800;
-       -2.0000  ,  1.0000;
-        1.0000  ,  3.0000;
-        3.0000  ,  1.0000;
-        4.0000  ,  3.0000;
-       10.6570  , -0.0300
-    ]
-%}
 
 %% DESCRIPTION %%%%%%%%%%%%%%%%%%%
     % Get through the course!!
@@ -27,22 +16,26 @@ function runRobot(serPort) % add points back soon!
 
     % Poll for bump Sensors to avoid getting NaN values when the 
     % robot first hits a wall
+DistanceSensorRoomba(serPort);
+AngleSensorRoomba(serPort); 
     [~, ~, ~, ~, ~, ~] = BumpsWheelDropsSensorsRoomba(serPort);
     %=============================================================%
 
-
     %%just for now!
-    points = [0 0; 1 1; 1 3; 3 3; 4 5; 6 2]; 
-
+    points = [0 0; 1 1; 1 3; 3 3; 3 5; 2 7]; 
+    
+    
 
     %% CONSTANTS YO
 
-    turnSpeed = .5; % in rads/s
-    fwdSpeed = .4; % in m/s
-    turnFwdSpeed = .15; % in rads/s
-    turnRadius = (turnFwdSpeed * ((2*pi)/turnSpeed))/pi/2;
-    tStart = tic; %for keeping track of time
-
+    angSpeedCompensate = 0.01; % old.. .081
+    turnSpeed = .3; % in rads/s %old..  .45
+    fwdSpeed = .2; % in m/s
+    turnFwdSpeed = .1; % in rads/s %old.. .2
+    measuredTurnDiameter = .996; %old.. 1.1938
+    robotDiameter = .335;
+    turnRadius = (measuredTurnDiameter-robotDiameter)/2;
+    tStart = tic; % for keeping track of time
 
     %%NOW WE BEGIN ACTUALLY MOVING THE ROBO
 
@@ -61,14 +54,18 @@ function runRobot(serPort) % add points back soon!
     recentLeaveDist = 0;
     
     %%first calculation
-    [data, recentLeaveDist] = computeDistAndAngle(points(idx-2,:), points(idx-1,:), points(idx,:), recentLeaveDist, turnRadius);
+    [data, recentLeaveDist] = computeDistAndAngle(points(idx-2,:), ...
+        points(idx-1,:), points(idx,:), recentLeaveDist, turnRadius);
     
     %%begin main loop
-    while(~atgoal)
+    while (~atgoal)
 
-        
+        Dist = DistanceSensorRoomba(serPort);
+        Angle = AngleSensorRoomba(serPort);    
+    
         % read all the sensors at once
-        [BumpRight, BumpLeft, BumpFront, Wall, ~, ~, ...
+        %{
+        [BumpRight, BumpLeft, BumpFront, ~, ~, ~, ...
         ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
         ~, ~, ~, ~, ~, ~]  = AllSensorsReadRoomba(serPort);
     
@@ -76,25 +73,25 @@ function runRobot(serPort) % add points back soon!
         while (isnan(BumpRight) || isnan(BumpLeft) || isnan(BumpFront))
             [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
                 = BumpsWheelDropsSensorsRoomba(serPort);
-            Wall = WallSensorReadRoomba(serPort);
         end
+        %}
         
         % update odometry and plot position
         pos(3) = mod(pos(3) + Angle, 2*pi);
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
         
-        
+        fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
         
         switch status
                 
             case 1 % driving straight
                 %disp('driving straight!');
-                SetFwdVelAngVelCreate(serPort,fwdSpeed,0);
+                SetFwdVelAngVelCreate(serPort,fwdSpeed,angSpeedCompensate);
                 
                 currentStraightDist = currentStraightDist + Dist;
                 %TODO better than >= ?
-                if(currentStraightDist >= data(1))
+                if(currentStraightDist >= data(1) * .75)
                    currentStraightDist = 0;
                    status = 2;
                    disp('CHANGE TO STATE 2');
@@ -111,7 +108,7 @@ function runRobot(serPort) % add points back soon!
                 end
                 
                 currentDeltaAngle = currentDeltaAngle + Angle;
-                if(abs(currentDeltaAngle) >= abs(data(2) * (pi/180)))
+                if(abs(currentDeltaAngle) >= .75*abs(data(2) * (pi/180)))
                     currentDeltaAngle = 0;
                     idx = idx + 1;
                     if(idx > size(points,1))
@@ -135,18 +132,12 @@ function runRobot(serPort) % add points back soon!
                    atgoal = true; 
                 end
         end
-        if(~atgoal) %because we might have set it in case 3 for safety
-            %atgoal = atPoint(pos, qGoal, toc(tStart));
-        end
-        printPosition(pos);
-        %drawnow;
+        % printPosition(pos);
     end
     
     disp('DONE YES WE BE DONE YO');
-    
-    
+        
 end
-
 
 function [data, newRecentLeave] = computeDistAndAngle(A, B, C, recentLeaveDist, turnRadius)
     % we can break this up into a series of distances and angles
@@ -167,20 +158,15 @@ function [data, newRecentLeave] = computeDistAndAngle(A, B, C, recentLeaveDist, 
     data(1) = mydist;
 end
 
-
 function angle = computeAngleBetweenPoints(A, B, C)
     
     ABrise = B(2)-A(2);
     ABrun = B(1)-A(1);
     ABangle = atan2d(ABrise,ABrun);
-    disp('AB ANGLE');
-    disp(ABangle);
     
     BCrise = C(2)-B(2);
     BCrun = C(1)-B(1);
     BCangle = atan2d(BCrise,BCrun);
-    disp('BC ANGLE');
-    disp(BCangle);
     
     angle = BCangle-ABangle;
     if(angle > 180)
@@ -188,9 +174,6 @@ function angle = computeAngleBetweenPoints(A, B, C)
     elseif(angle < -180)
         angle = 360 + angle;
     end
-    disp('FINAL ANGLE');
-    disp(angle);
-    
 
 end
 
@@ -226,28 +209,13 @@ function newAng = turnToFacePoint(serPort, pos, qGoal)
     end
     
     % do the turn and update the angle
-    actualTurn = turnRadians(serPort, compensateAng);
-    newAng = mod(pos(3) + actualTurn, 2*pi);
-
+    %actualTurn = turnRadians(serPort, compensateAng);
+    %newAng = mod(pos(3) + actualTurn, 2*pi);
+    turnAngle(serPort, 0.1, .7*compensateAng);
+    AngleSensorRoomba(serPort);
+    newAng = mod(pos(3) + compensateAng, 2*pi);
     disp('Completed turnToFacePoint');
-    
-end
 
-function isAtPoint = atPoint(pos, qGoal, duration)
-% Determine if we're at goal position, which depends on program duration.
-%
-% Input:
-% pos - Current position of robot (x, y, theta)
-% qGoal - Goal position (x, y)
-% duration - How long program has been running (s)
-%
-% Output:
-% isAtPoint - True if robot is considered at goal
-
-    distCushion = 0.2 + (duration/60)*0.04;
-    dist = getDistance(pos, qGoal); 
-    isAtPoint = dist < distCushion; 
-    
 end
 
 function angTurned = turnRadians(serPort, angToTurn)
