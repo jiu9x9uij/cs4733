@@ -4,9 +4,14 @@ function robotspeedtest(serPort)
     [~, ~, ~, ~, ~, ~] = BumpsWheelDropsSensorsRoomba(serPort);
     DistanceSensorRoomba(serPort);
 
-    SetFwdVelAngVelCreate(serPort, .3, 0);
+    angSpeedCompensate = 0.01;
+    fwdSpeed = .3;
     
-    while (true)
+    SetFwdVelAngVelCreate(serPort, fwdSpeed, angSpeedCompensate);
+    
+    totalDist = 0;
+    
+    while (totalDist < 5)
         [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
                 = BumpsWheelDropsSensorsRoomba(serPort);
         
@@ -17,12 +22,13 @@ function robotspeedtest(serPort)
         
         Dist = DistanceSensorRoomba(serPort);
 
-        fprintf('distance: %.3f \n' , Dist);
+        totalDist = totalDist + Dist;
+        
+        fprintf('distance: %.3f \n' , totalDist);
         
         if (BumpRight || BumpLeft || BumpFront)
             break;
         end
-        
     end
     
     SetFwdVelAngVelCreate(serPort, 0, 0);

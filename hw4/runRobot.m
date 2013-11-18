@@ -187,7 +187,6 @@ function turnRobot(serPort, positive) %positive or negative turn
 
 end
 
-
 function distGone = driveDistancte(serPort, dist)
     done = false;
     distGone = 0;
@@ -208,8 +207,8 @@ end
 
 function moveForward(serPort)
     % our compenstation for the angle
-    angSpeedCompensate = 0.01; % old.. .081
-    fwdSpeed = .2; % in m/s
+    angSpeedCompensate = .02713;
+    fwdSpeed = .3;
     if isa(serPort,'CreateRobot')
         angSpeedCompensate = 0; % old.. .081
         fwdSpeed = .4;
@@ -224,7 +223,7 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
     % depending on our turn radius, the distances changes
 
     %stuff for the real robot
-    measuredTurnDiameter = .996; %old.. 1.1938
+    measuredTurnDiameter = .98; %old.. 1.1938
     robotDiameter = .335;
     turnRadius = (measuredTurnDiameter-robotDiameter)/2;
     
@@ -233,7 +232,6 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
         turnSpeed = .3; % must be same as above in turnrobot
         turnFwdSpeed = .1; % must be same as above in turnrobot
         turnRadius = (turnFwdSpeed * ((2*pi)/turnSpeed))/pi/2;
-    
     end
     
     %because we might not be facing exactly the right way, we have to
