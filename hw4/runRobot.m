@@ -5,20 +5,10 @@ function runRobot(serPort) % add points back soon!
 % following rows are points to go to, in order
 % last row is goal point
 
-%{
-for 1= 1:size(obstacles,2)
-    obstacle = obstacles{i};
-    for j=1:size(obstacle,1)
-        vertex = obstacle(j,:);
-        x = vertex(1);
-        y = vertex(2);
-    end
-end
-%}
-
     %%just for now!
-    points = [0 0; 1 1; 1 3; 3 3; 3 5; 2 7];
-    
+    points = [0 0; 1 1; 1 2; 0 4; 1 7];
+    obstacles = cell(1);
+    obstacles{1} = [0,3];
     
 %% DESCRIPTION %%%%%%%%%%%%%%%%%%%
     % Get through the course!!
@@ -38,15 +28,6 @@ end
     [~, ~, ~, ~, ~, ~] = BumpsWheelDropsSensorsRoomba(serPort);
     %=============================================================%
     
-
-    %% CONSTANTS YO
-
-
-
-    tStart = tic; % for keeping track of time
-
-    %%NOW WE BEGIN ACTUALLY MOVING THE ROBO
-
     % current position and orientation
     pos = [points(1,1), points(1,2), 0];
     qGoal = points(size(points,1),:);
@@ -71,38 +52,25 @@ end
     while (~atgoal)
 
         Dist = DistanceSensorRoomba(serPort);
-        Angle = AngleSensorRoomba(serPort);    
-        [BumpRight,BumpLeft,~,~,~,BumpFront] = BumpsWheelDropsSensorsRoomba(serPort);
-        
-        
-        % read all the sensors at once
-        %{
-        [BumpRight, BumpLeft, BumpFront, ~, ~, ~, ...
-        ~, ~, ~, ~, ~,~, ~, ~, ~, Dist, Angle, ...
-        ~, ~, ~, ~, ~, ~]  = AllSensorsReadRoomba(serPort);
-    
-        % handle possible NaN
-        while (isnan(BumpRight) || isnan(BumpLeft) || isnan(BumpFront))
-            [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
-                = BumpsWheelDropsSensorsRoomba(serPort);
-        end
-        %}
+        Angle = AngleSensorRoomba(serPort);  
+        Bump = checkForBump(serPort);
         
         % update odometry and plot position
         pos(3) = mod(pos(3) + Angle, 2*pi);
         pos(1) = pos(1) + Dist * cos(pos(3));
         pos(2) = pos(2) + Dist * sin(pos(3));
         
+        % print position
         fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
         
-        if((BumpRight || BumpLeft || BumpFront) && ~(status==4))
+        if (Bump && ~(status==4))
             disp('oh no bumped!!');
             stopRobot(serPort);
             a = points(idx-2,:);
             b = points(idx-1,:);
             c = points(idx,:);
             pos(1,1:2) = getClosestPoint(obstacles,pos);
-            [whereIProbablyShouldBe, distToLine] = pointOnLine(a,b, point);
+            [whereIProbablyShouldBe, distToLine] = pointOnLine(a,b,pos(1,1:2));
             %tricky because we have to get back into the system
             [pos(3), compensateTurn] = turnToFacePoint(serPort, pos, whereIProbablyShouldBe);
             currentStraightDist = 0;
@@ -110,34 +78,35 @@ end
             AngleSensorRoomba(serPort); %just to clear this shizzle cuz who knows
             DistanceSensorRoomba(serPort);
             disp('changing to status 4');
+            Bump = checkForBump(serPort);
         end
+        
+        breakEarlyAngCompensate = 5*pi/180;
+        breakEarlyDistCompensate = 0.1;
         
         switch status
                 
             case 1 % driving straight
-                %disp('driving straight!');
                 moveForward(serPort);
                 
                 currentStraightDist = currentStraightDist + Dist;
-                if(currentStraightDist >= data(1)) % compensate for lag add  * .75?
+                if(currentStraightDist >= data(1) - breakEarlyDistCompensate)
                    currentStraightDist = 0;
                    status = 2;
                    disp('CHANGE TO STATE 2');
                 end
                 
             case 2 % turning
-                %disp('turning!');
-                positive = data(2) > 0;
-                turnRobot(serPort, positive);
                 
                 %how far we've turned in this particular arc
                 currentDeltaAngle = currentDeltaAngle + Angle;
                 
-                if(abs(currentDeltaAngle) >= abs(data(2) * (pi/180))) %if lag add * .75?
+                if (abs(currentDeltaAngle) >= abs(data(2)*(pi/180))-breakEarlyAngCompensate)
+                    moveForward(serPort);
                     currentDeltaAngle = 0;
                     idx = idx + 1;
                     %this means we have only to head straight to the goal
-                    if(idx > size(points,1))
+                    if (idx > size(points,1))
                         status = 3;
                         data(1) = getDistance(pos,qGoal);
                         disp('CHANGE TO STATE 3');
@@ -146,9 +115,10 @@ end
                         [data, recentLeaveDist] = computeDistAndAngle(serPort, pos, points(idx-1,:), points(idx,:), recentLeaveDist, pos(3));
                         status = 1;
                         disp('CHANGE TO STATE 1');
-                        disp('DATA: ');
-                        disp(data);
                     end
+                else
+                    positive = data(2) > 0;
+                    turnRobot(serPort, positive);
                 end
             case 3 %driving straight for some distance to the goal
                 moveForward(serPort);
@@ -160,7 +130,7 @@ end
             case 4 %try and get to the line we should be on
                 moveForward(serPort);
                 currentStraightDist = currentStraightDist + Dist;
-                if(BumpRight || BumpLeft || BumpFront)
+                if(Bump)
                     stopRobot(serPort);
                     turnRadians(serPort, compensateTurn/4);
                     AngleSensorRoomba(serPort); %clear it so the pos(3) never gets updated
@@ -170,7 +140,6 @@ end
                    status = 5;
                    disp('changing to status 5');
                 end
-                
             case 5 %turn to face "point b", drive to point b, turn to c
                 pos(3) = turnToFacePoint(serPort, pos, b);
                 quickDist = driveDistance(serPort, norm(b-pos(1,1:2)));
@@ -178,16 +147,36 @@ end
                 pos(2) = pos(2) + quickDist * sin(pos(3));
                 pos(3) = turnToFacePoint(serPort, pos, c);
                 idx = idx + 1;
-                [data, recentLeaveDist] = computeDistAndAngle(serPort, points(idx-2,:), ...
-                points(idx-1,:), points(idx,:), 0, pos(3));
-                status = 1;
+                %this means we have only to head straight to the goal
+                if (idx > size(points,1))
+                    status = 3;
+                    data(1) = getDistance(pos,qGoal);
+                    disp('CHANGE TO STATE 3');
+                else
+                    % calculate data with current pos as first point
+                    [data, recentLeaveDist] = computeDistAndAngle(serPort,...
+                        pos, points(idx-1,:), points(idx,:), 0, pos(3));
+                    status = 1;
+                    disp('CHANGE TO STATE 1');
+                end
         end
-        % printPosition(pos);
-        drawnow;
     end
     
     disp('DONE YES WE BE DONE YO');
+    stopRobot(serPort);
         
+end
+
+function Bump = checkForBump(serPort)
+    [BumpRight,BumpLeft,~,~,~,BumpFront] = BumpsWheelDropsSensorsRoomba(serPort);
+
+    % handle possible NaN
+    while (isnan(BumpRight) || isnan(BumpLeft) || isnan(BumpFront))
+        [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
+            = BumpsWheelDropsSensorsRoomba(serPort);
+    end
+
+    Bump = BumpRight || BumpLeft || BumpFront;
 end
 
 function turnRobot(serPort, positive) %positive or negative turn
@@ -224,7 +213,7 @@ function moveForward(serPort)
     angSpeedCompensate = .02713;
     fwdSpeed = .3;
     if isa(serPort,'CreateRobot')
-        angSpeedCompensate = 0; % old.. .081
+        angSpeedCompensate = 0;
         fwdSpeed = .4;
     end
     SetFwdVelAngVelCreate(serPort,fwdSpeed,angSpeedCompensate);
@@ -271,11 +260,6 @@ and any point on the second line as q + u s (for a scalar parameter u).
     t = cross2d((q-p), (s / cross2d(r,s)));
     
     newB = p + t*r;
-    
-    
-    
-    disp('NEW B');
-    disp(newB);
     
     data = zeros(1,2);
 
@@ -353,6 +337,7 @@ function [intersection,distanceToLine] = pointOnLine(lineStart, lineEnd, point)
     
     distanceToLine = dot(v,r);
     intersection = point + v*distanceToLine;
+    distanceToLine = abs(distanceToLine);
 
 end
 
@@ -385,9 +370,6 @@ function [newAng, compensateAng] = turnToFacePoint(serPort, pos, qGoal)
     % do the turn and update the angle
     actualTurn = turnRadians(serPort, compensateAng);
     newAng = mod(pos(3) + actualTurn, 2*pi);
-    %turnAngle(serPort, 0.1, .7*compensateAng);
-    %AngleSensorRoomba(serPort);
-    %newAng = mod(pos(3) + compensateAng, 2*pi);
     disp('Completed turnToFacePoint');
 
 end
@@ -401,6 +383,9 @@ function angTurned = turnRadians(serPort, angToTurn)
 %
 % Output:
 % angTurned - Actual angle turned (rad)
+
+    % compensate
+    angToTurn = 0.9*angToTurn;
 
     % constants
     turnSpeed = 0.35; % turn angle speed (rad/s)
@@ -452,27 +437,4 @@ function dist = getDistance(point1, point2)
 
     dist = pdist([point1(1),point1(2);point2(1),point2(2)], 'euclidean'); 
 
-end
-
-function printPosition(pos)
-% Displays x,y,theta position in readible format.
-% Also plots the position in blue and orientation in green.
-%
-% Input:
-% pos - Position to display
-    figure(1); % draw odometry on new plot
-    hold on;   % draw all points on the new plot
-
-    %fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
-    
-    % plot position
-    plot(pos(1), pos(2), 'b.');
-    
-    % plot orientation
-    dispOrientation = 0.25;
-    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
-         [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
-    
-    drawnow;
-     
 end
