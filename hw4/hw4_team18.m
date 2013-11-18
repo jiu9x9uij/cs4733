@@ -7,8 +7,8 @@
 function hw4_team18(serPort, world_file, start_goal_file)
 
     % constants
-    robot_num_verts = 4;
-    robot_mult = 1.1;
+    robot_num_verts = 8;
+    robot_mult = 1.25;
     robot_radius = 0.1675;
 
     % create the world
@@ -40,6 +40,7 @@ end
 %% SETTING UP ENVIRONMENT %%%%%%%%%%%%%%%%%%%%%
 
 function [wall, obstacles] = readWorldFromFile(file)
+% reads obstacles and wall from file into usable matricies
 
     try
         % open file
@@ -70,6 +71,7 @@ function [wall, obstacles] = readWorldFromFile(file)
 end
 
 function obstacle = readObstacle(fid)
+% read one obstacle from file into a useable matrix
 
     % first line is number of verticies
     line = fgetl(fid);
@@ -90,6 +92,7 @@ function obstacle = readObstacle(fid)
 end
 
 function [start, goal] = readStartGoalFromFile(file)
+% read start and goal points from file
 
     try
         % open file
@@ -117,6 +120,8 @@ function [start, goal] = readStartGoalFromFile(file)
 end
 
 function robot_pts = buildRobot(radius, num_verticies)
+% construct set of points that represent robot, generally circular
+% for example if num_verticies is 8, will create an octagon
 
     degree = 2*pi/num_verticies;
     
@@ -133,6 +138,8 @@ end
 %% GROW OBSTACLES %%%%%%%%%%%%%%%%%%%%%
 
 function grown_obstacles = growObstacles(obstacles, robot_pts)
+% reflection algorithm to grow obstacles
+% picks right-most robot point as reference point
 
     num_robot_pts = size(robot_pts,1);
     num_obstacles = size(obstacles,2);
@@ -155,18 +162,8 @@ function grown_obstacles = growObstacles(obstacles, robot_pts)
     
 end
 
-%{
-for 1= 1:size(obstacles,2)
-    obstacle = obstacles{i};
-    for j=1:size(obstacle,1)
-        vertex = obstacle(j,:);
-        x = vertex(1);
-        y = vertex(2);
-    end
-end
-%}
-
 function verticies = growVerticies(obstacle, robot_pts)
+% for one specific object, use reflection algorithm to grow verticies
 
     num_robot_pts = size(robot_pts,1);
     num_obs_verts = size(obstacle,1);
@@ -185,6 +182,7 @@ function verticies = growVerticies(obstacle, robot_pts)
 end
 
 function grown_obstacle = computeConvexHull(verticies)
+% given set of any verticies, computes convex hull polygon
 
     num_verticies = size(verticies, 1);
 
@@ -254,6 +252,9 @@ end
 %% VISIBILITY GRAPH %%%%%%%%%%%%%%%%%%%%%
 
 function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall)
+% given start and goal points, set of obstacles and wall, creates
+% visibility graph, which represents all points that can "see" each
+% other in free space.
 
     num_obs = size(obstacles,2);
 
@@ -334,6 +335,8 @@ function [verticies, edges] = createVisibilityGraph(start, goal, obstacles, wall
 end
 
 function [p, intersects] = intersectLines(p1, p2, p3, p4)
+% check to see if two lines intersect
+
     t1 = p1(1) - p2(1);
     t2 = p3(1) - p4(1);
     t3 = p1(2) - p2(2);
@@ -341,13 +344,13 @@ function [p, intersects] = intersectLines(p1, p2, p3, p4)
     t5 = p1(1)*p2(2) - p1(2)*p2(1);
     t6 = p3(1)*p4(2) - p3(2)*p4(1);
     t7 = t1*t4 - t3*t2;
-    
     p = [(t5*t2 - t1*t6)/t7, (t5*t4 - t3*t6)/t7];
     intersects = t7 ~= 0;
 end
 
 function [p, intersects] = intersectSegments(p1, p2, p3, p4)
-    
+% check to see if two line segments intersect   
+
     if (isequal(p1, p3) || isequal(p1, p4))
         intersects = true;
         p = p1;
@@ -366,15 +369,18 @@ function [p, intersects] = intersectSegments(p1, p2, p3, p4)
         d1 = pdist([p1;p2]);
         d2 = pdist([p3;p4]);
 
+        myEps = 1e-12; % matlab "eps" is too small
+        
         % use eps to account for floating point rounding errors
-        if (pdist([p;p1]) - d1 > eps || pdist([p;p2]) - d1 > eps || ...
-            pdist([p;p3]) - d2 > eps || pdist([p;p4]) - d2 > eps)
+        if (pdist([p;p1]) - d1 > myEps || pdist([p;p2]) - d1 > myEps || ...
+            pdist([p;p3]) - d2 > myEps || pdist([p;p4]) - d2 > myEps)
             intersects = false;
         end
     end
 end
 
 function intersects = intersectsObstacle(p1, p2, obstacle)
+% check to see if line from p1 to p2 intersects the obstacle
 
     for j=1:size(obstacle,1)-1
         obs1 = obstacle(j,:);
@@ -411,11 +417,10 @@ function intersects = intersectsObstacle(p1, p2, obstacle)
 end
 
 function inside = insideObstacle(p1, obstacle)
+% check to see if point p1 is inside the obstacle
 
     [in, on] = inpolygon(p1(1),p1(2),obstacle(:,1),obstacle(:,2));
-
     inside = in && ~on;
-
 end
 
 
@@ -423,11 +428,10 @@ end
 %% DIJKSTRA %%%%%%%%%%%%%%%%%%%%%
 
 function path = findShortestPath(verticies, edges, start, goal)
+% dijkstra's shortest path algorithm
 % verticies is a list of (x, y) pairs
 % edges is a list of (vert_idx1, vert_idx2, cost)
-% start is vert_idx of start
-% goal is vert_idx of goal
-% shortest_path is list of vert_idx hops
+% start and goal are (x, y) points
 
     % if start and goal are same vertex, done
     if (start == goal)
