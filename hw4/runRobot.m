@@ -51,7 +51,7 @@ end
     pos = [points(1,1), points(1,2), 0];
     qGoal = points(size(points,1),:);
     %turn to face the first point
-    pos(3) = turnToFacePoint(serPort, pos, points(2,:));
+    [pos(3),~] = turnToFacePoint(serPort, pos, points(2,:));
     
     %%loop variables
     atgoal = false;
@@ -60,6 +60,8 @@ end
     currentDeltaAngle = 0;
     idx = 3;
     recentLeaveDist = 0;
+    distToLine = 0; % if we bump we need this guy
+    compensateTurn = 1; %same deal, for bump stuff
     
     %%first calculation
     [data, recentLeaveDist] = computeDistAndAngle(serPort, points(idx-2,:), ...
@@ -93,33 +95,21 @@ end
         
         fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
         
-        if(BumpRight || BumpLeft || BumpFront)
-           disp('oh no bumped!!');
-           
-           a = points(idx-2,:);
-           b = points(idx-1,:);
-           c = points(idx,:);
-           pos(1,1:2) = getClosestPoint(obstacles,pos);
-           
-           [whereIProbablyShouldBe, quickDist] = pointOnLine(a,b, point);
-           
-           %tricky because we have to get back into the system
-           
-           pos(3) = turnToFacePoint(serPort, pos, whereIProbablyShouldBe);
-           quickDist = driveDistance(serPort, quickDist);
-           pos(1) = pos(1) + quickDist * cos(pos(3));
-           pos(2) = pos(2) + quickDist * sin(pos(3));
-           pos(3) = turnToFacePoint(serPort, pos, b);
-           quickDist = driveDistance(serPort, norm(b-whereIProbablyShouldBe));
-           pos(1) = pos(1) + quickDist * cos(pos(3));
-           pos(2) = pos(2) + quickDist * sin(pos(3));
-           pos(3) = turnToFacePoint(serPort, b, c);
-           idx = idx + 1;
-           [data, recentLeaveDist] = computeDistAndAngle(serPort, points(idx-2,:), ...
-        points(idx-1,:), points(idx,:), 0, pos(3));
-            status = 1;
+        if((BumpRight || BumpLeft || BumpFront) && ~(status==4))
+            disp('oh no bumped!!');
+            stopRobot(serPort);
+            a = points(idx-2,:);
+            b = points(idx-1,:);
+            c = points(idx,:);
+            pos(1,1:2) = getClosestPoint(obstacles,pos);
+            [whereIProbablyShouldBe, distToLine] = pointOnLine(a,b, point);
+            %tricky because we have to get back into the system
+            [pos(3), compensateTurn] = turnToFacePoint(serPort, pos, whereIProbablyShouldBe);
+            currentStraightDist = 0;
+            status = 4;
             AngleSensorRoomba(serPort); %just to clear this shizzle cuz who knows
             DistanceSensorRoomba(serPort);
+            disp('changing to status 4');
         end
         
         switch status
@@ -167,6 +157,30 @@ end
                 if(currentStraightDist >= data(1))
                    atgoal = true; 
                 end
+            case 4 %try and get to the line we should be on
+                moveForward(serPort);
+                currentStraightDist = currentStraightDist + Dist;
+                if(BumpRight || BumpLeft || BumpFront)
+                    stopRobot(serPort);
+                    turnRadians(serPort, compensateTurn/4);
+                    AngleSensorRoomba(serPort); %clear it so the pos(3) never gets updated
+                end
+                if(currentStraightDist >= distToLine)
+                   stopRobot(serPort);
+                   status = 5;
+                   disp('changing to status 5');
+                end
+                
+            case 5 %turn to face "point b", drive to point b, turn to c
+                pos(3) = turnToFacePoint(serPort, pos, b);
+                quickDist = driveDistance(serPort, norm(b-pos(1,1:2)));
+                pos(1) = pos(1) + quickDist * cos(pos(3));
+                pos(2) = pos(2) + quickDist * sin(pos(3));
+                pos(3) = turnToFacePoint(serPort, pos, c);
+                idx = idx + 1;
+                [data, recentLeaveDist] = computeDistAndAngle(serPort, points(idx-2,:), ...
+                points(idx-1,:), points(idx,:), 0, pos(3));
+                status = 1;
         end
         % printPosition(pos);
         drawnow;
@@ -187,14 +201,14 @@ function turnRobot(serPort, positive) %positive or negative turn
 
 end
 
-function distGone = driveDistancte(serPort, dist)
+function distGone = driveDistance(serPort, totalDist)
     done = false;
     distGone = 0;
     while(~done)
         dist = DistanceSensorRoomba(serPort);
         distGone = distGone + dist;
         moveForward(serPort); 
-        if(distGone >= dist)
+        if(distGone >= totalDist)
             done = true;
         end
     end
@@ -315,10 +329,11 @@ function mylikelypoint = getClosestPoint(obstacles,pos)
             vertex = obstacle(j,:);
             currentDist = getDistance(pos,vertex);
             if(currentDist < bestDistance)
+                bestDistance = currentDist;
                 mylikelypoint = vertex;
             end
         end
-    end 
+    end
 end
 
 function [intersection,distanceToLine] = pointOnLine(lineStart, lineEnd, point)
@@ -329,12 +344,19 @@ function [intersection,distanceToLine] = pointOnLine(lineStart, lineEnd, point)
     r = lineStart - point;
     v = [line(2), -line(1)]; %perp to line
     
+    %make sure v is pointing from point
+    currentDist = getDistance(point, lineStart);
+    newDist = getDistance(point + v,lineStart);
+    if(newDist > currentDist)
+        v = v*-1;
+    end
+    
     distanceToLine = dot(v,r);
-    intersection = point + r*distanceToLine;
+    intersection = point + v*distanceToLine;
 
 end
 
-function newAng = turnToFacePoint(serPort, pos, qGoal)
+function [newAng, compensateAng] = turnToFacePoint(serPort, pos, qGoal)
 % Turn in place to face goal.
 %
 % Input:
