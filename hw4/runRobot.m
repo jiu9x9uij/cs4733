@@ -168,6 +168,14 @@ function runRobot(serPort) % add points back soon!
 end
 
 function Bump = checkForBump(serPort)
+    % simply reads the bump sensors
+    %
+    % Input:
+    % serPort - for robot access
+    %
+    % Output: 
+    % whether or not any of the bump sensors are true
+    
     [BumpRight,BumpLeft,~,~,~,BumpFront] = BumpsWheelDropsSensorsRoomba(serPort);
 
     % handle possible NaN
@@ -179,9 +187,18 @@ function Bump = checkForBump(serPort)
     Bump = BumpRight || BumpLeft || BumpFront;
 end
 
-function turnRobot(serPort, positive) %positive or negative turn
-    turnSpeed = .3; % in rads/s %old..  .45
-    turnFwdSpeed = .1; % in rads/s %old.. .2
+function turnRobot(serPort, positive) 
+    % turns the robot
+    %
+    % Input:
+    % serPort - for robot access
+    % positive - whether to turn positive or negative
+    %
+    % Output: 
+    % none
+    
+    turnSpeed = .3; % in rads/s
+    turnFwdSpeed = .1; % in rads/s
     if(positive)
         SetFwdVelAngVelCreate(serPort,turnFwdSpeed,turnSpeed);
     else
@@ -191,6 +208,16 @@ function turnRobot(serPort, positive) %positive or negative turn
 end
 
 function distGone = driveDistance(serPort, totalDist)
+    % drives a certain distance and stops
+    %
+    % Input:
+    % serPort - for robot access
+    % totalDist - distance to travel before stopping
+    %
+    % Output: 
+    % actual distance traveled 
+    
+
     done = false;
     distGone = 0;
     while(~done)
@@ -205,11 +232,26 @@ function distGone = driveDistance(serPort, totalDist)
 end
 
 function stopRobot(serPort)
+    % stops the robot
+    %
+    % Input:
+    % serPort - for robot access
+    %
+    % Output: 
+    % none
+    
     SetFwdVelAngVelCreate(serPort,0.00001,0.00001);
 end
 
 function moveForward(serPort)
-    % our compenstation for the angle
+    % drive straight with compensation
+    %
+    % Input:
+    % serPort - for robot access
+    %
+    % Output:
+    % none
+    
     angSpeedCompensate = .02713;
     fwdSpeed = .3;
     if isa(serPort,'CreateRobot')
@@ -220,6 +262,18 @@ function moveForward(serPort)
 end
 
 function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLeaveDist, angle)
+    % Compute dist to travel and amount to turn for corner cutting system
+    %
+    % Input:
+    % serPort for checking if real robot
+    % A,B,C - points, B is the center point
+    % recentLeaveDist - how far onto the line A-B we already are
+    % angle - current Angle
+    %
+    % Output:
+    % data -dist to travel and amount to turn
+    % newRecentLeave - how far onto new line we will end up
+
     % we can break this up into a series of distances and angles
     % the distances represent driving straight, the angles are
     % using our "standard" turn radius which can be set
@@ -238,16 +292,18 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
     end
     
     %because we might not be facing exactly the right way, we have to
-    %modify our point B
+    %modify our point B to B' that we will actually hit given our
+    %trajectory
 
     %{
-There?s a nice approach to this problem that uses vector cross products. 
-\Define the 2-dimensional vector cross product v × w to be vxwy ? vywx 
-(this is the magnitude of the 3-dimensional cross product).
+        "There?s a nice approach to this problem that uses vector cross products. 
+        \Define the 2-dimensional vector cross product v × w to be vxwy ? vywx 
+        (this is the magnitude of the 3-dimensional cross product).
 
-Suppose the two line segments run from p to p + r and from q to q + s. 
-Then any point on the first line is representable as p + t r (for a scalar parameter t) 
-and any point on the second line as q + u s (for a scalar parameter u).
+        Suppose the two line segments run from p to p + r and from q to q + s. 
+        Then any point on the first line is representable as p + t r (for a scalar parameter t) 
+        and any point on the second line as q + u s (for a scalar parameter
+        u)."
 %}
     
     p = A(1,1:2);
@@ -281,7 +337,14 @@ result = v1(1) * v2(2) - v1(2)*v2(1);
 end
 
 function angle = computeAngleBetweenPoints(A, B, C)
-    
+    % Find angle between three points
+    %
+    % Input:
+    % A,B,C - points, B is the center point
+    %
+    % Output:
+    % angle - angle in radians
+
     ABrise = B(2)-A(2);
     ABrun = B(1)-A(1);
     ABangle = atan2d(ABrise,ABrun);
@@ -305,6 +368,15 @@ function dist = computeLeaveLineDist(angle, radius)
 end
 
 function mylikelypoint = getClosestPoint(obstacles,pos)
+    % Find likely collision vertex
+    %
+    % Input:
+    % obstacles - coordinates of the obstacles
+    % pos - where we thought we were
+    %
+    % Output:
+    % mylikelypoint - closest vertex in obstacles to pos
+    
     bestDistance = 1000000;
     mylikelypoint = [0,0];
     for i= 1:size(obstacles,2)
@@ -321,6 +393,16 @@ function mylikelypoint = getClosestPoint(obstacles,pos)
 end
 
 function [intersection,distanceToLine] = pointOnLine(lineStart, lineEnd, point)
+    % Closest point on a line from another point
+    %
+    % Input:
+    % lineStart - first point (x,y) of line
+    % lineEnd - second point (x,y) of line
+    % point - the point not on the line
+    %
+    % Output:
+    % intersection - closest point on the line
+    % distanceToLine - distance from point to intersection
 
     line = (lineEnd-lineStart);
     line = line/norm(line);
