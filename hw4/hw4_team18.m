@@ -29,6 +29,8 @@ function hw4_team18(serPort, world_file, start_goal_file)
     [verticies, edges] = createVisibilityGraph(start, goal, grown_obstacles, wall);
     shortest_path = findShortestPath(verticies, edges, start, goal);
 
+    disp(shortest_path);
+    
     % plot the paths
     plotPaths(verticies, edges, [0 0.5 0]); % all paths in dark green
     plotPath(shortest_path, [1 0 0], 2);    % shortest path in red
@@ -158,8 +160,9 @@ function grown_obstacles = growObstacles(obstacles, robot_pts)
     grown_obstacles = cell(1, num_obstacles);
 
     for i = 1:num_obstacles
+        
         % grow verticies
-        verticies = growVerticies(obstacles{i}, robot_pts);
+        verticies = growVerticies(obstacles{i}, robot_pts, reference_point);
 
         % grown obstacle is convex hull of new set of verticies
         grown_obstacles{1,i} = computeConvexHull(verticies);
@@ -167,7 +170,7 @@ function grown_obstacles = growObstacles(obstacles, robot_pts)
     
 end
 
-function verticies = growVerticies(obstacle, robot_pts)
+function verticies = growVerticies(obstacle, robot_pts, ref_pt)
 % for one specific object, use reflection algorithm to grow verticies
 
     num_robot_pts = size(robot_pts,1);
@@ -609,6 +612,14 @@ function runRobot(serPort, points, obstacles)
     AngleSensorRoomba(serPort); 
     
     % current position and orientation
+    points = [-3.1070,    0.5800;
+   -2.0334,    0.5089;
+   -1.5634,    0.5089;
+    0.2065,    0.7488;
+    0.6765,    0.7488;
+    5.0690,   -0.4417;
+    5.5390,   -0.4417;
+   10.6570,   -0.0300 ];
     pos = [points(1,1), points(1,2), 0];
     qGoal = points(size(points,1),:);
     %turn to face the first point

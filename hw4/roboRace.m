@@ -1,34 +1,29 @@
 
-function runRobot(serPort) % add points back soon!
+%% ROBORACE %%%%%%%%%%%%%%%%%%%%%
+
+function roboRace(serPort)
 % points has 2 columns and some number of rows
 % first row is current point
 % following rows are points to go to, in order
 % last row is goal point
 
-    %%just for now!
-    points = [0 0; 1 1; 1 2; 0 4; 1 7];
-    obstacles = cell(1);
-    obstacles{1} = [0,3];
-    
-%% DESCRIPTION %%%%%%%%%%%%%%%%%%%
-    % Get through the course!!
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %%
-    %=============================================================%
-    % Clear cache & avoid NaN values                              %
-    %=============================================================%
-    clc;                                                          % Clear the cache
+    % Clear the cache
+    clc;                                                          
 
-    % Poll for bump Sensors to avoid getting NaN values when the 
-    % robot first hits a wall
-    
-    %clear the distance and angle sensors
+    % Poll for bump Sensors to avoid getting NaN values and
+    % clear the distance and angle sensors
+    BumpsWheelDropsSensorsRoomba(serPort);
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort); 
-    [~, ~, ~, ~, ~, ~] = BumpsWheelDropsSensorsRoomba(serPort);
-    %=============================================================%
     
     % current position and orientation
+    points = [  -3.1070,   -0.5800;
+   -2.0334,   -0.5089;
+   -1.5634,   -0.5089;
+    0.9965,   -0.8488;
+    5.0390,    0.3417;
+   10.6570,    0.00 ];
+    obstacles = cell(1);
     pos = [points(1,1), points(1,2), 0];
     qGoal = points(size(points,1),:);
     %turn to face the first point
@@ -77,11 +72,11 @@ function runRobot(serPort) % add points back soon!
             status = 4;
             AngleSensorRoomba(serPort); %just to clear this shizzle cuz who knows
             DistanceSensorRoomba(serPort);
-            disp('changing to status 4');
+            disp('CHANGE TO STATE 4');
             Bump = checkForBump(serPort);
         end
         
-        breakEarlyAngCompensate = 5*pi/180;
+        breakEarlyAngCompensate =0;% 5*pi/180;
         breakEarlyDistCompensate = 0.1;
         
         switch status
@@ -138,7 +133,7 @@ function runRobot(serPort) % add points back soon!
                 if(currentStraightDist >= distToLine)
                    stopRobot(serPort);
                    status = 5;
-                   disp('changing to status 5');
+                   disp('CHANGE TO STATE 5');
                 end
             case 5 %turn to face "point b", drive to point b, turn to c
                 pos(3) = turnToFacePoint(serPort, pos, b);
@@ -162,19 +157,19 @@ function runRobot(serPort) % add points back soon!
         end
     end
     
-    disp('DONE YES WE BE DONE YO');
+    disp('DONE!');
     stopRobot(serPort);
-        
+
 end
 
 function Bump = checkForBump(serPort)
-    % simply reads the bump sensors
-    %
-    % Input:
-    % serPort - for robot access
-    %
-    % Output: 
-    % whether or not any of the bump sensors are true
+% simply reads the bump sensors
+%
+% Input:
+% serPort - for robot access
+%
+% Output: 
+% whether or not any of the bump sensors are true
     
     [BumpRight,BumpLeft,~,~,~,BumpFront] = BumpsWheelDropsSensorsRoomba(serPort);
 
@@ -188,14 +183,14 @@ function Bump = checkForBump(serPort)
 end
 
 function turnRobot(serPort, positive) 
-    % turns the robot
-    %
-    % Input:
-    % serPort - for robot access
-    % positive - whether to turn positive or negative
-    %
-    % Output: 
-    % none
+% turns the robot
+%
+% Input:
+% serPort - for robot access
+% positive - whether to turn positive or negative
+%
+% Output: 
+% none
     
     turnSpeed = .3; % in rads/s
     turnFwdSpeed = .1; % in rads/s
@@ -208,15 +203,14 @@ function turnRobot(serPort, positive)
 end
 
 function distGone = driveDistance(serPort, totalDist)
-    % drives a certain distance and stops
-    %
-    % Input:
-    % serPort - for robot access
-    % totalDist - distance to travel before stopping
-    %
-    % Output: 
-    % actual distance traveled 
-    
+% drives a certain distance and stops
+%
+% Input:
+% serPort - for robot access
+% totalDist - distance to travel before stopping
+%
+% Output: 
+% actual distance traveled    
 
     done = false;
     distGone = 0;
@@ -232,27 +226,30 @@ function distGone = driveDistance(serPort, totalDist)
 end
 
 function stopRobot(serPort)
-    % stops the robot
-    %
-    % Input:
-    % serPort - for robot access
-    %
-    % Output: 
-    % none
+% stops the robot
+%
+% Input:
+% serPort - for robot access
+%
+% Output: 
+% none
     
     SetFwdVelAngVelCreate(serPort,0.00001,0.00001);
 end
 
 function moveForward(serPort)
-    % drive straight with compensation
-    %
-    % Input:
-    % serPort - for robot access
-    %
-    % Output:
-    % none
+% drive straight with compensation
+%
+% Input:
+% serPort - for robot access
+%
+% Output:
+% none
     
     angSpeedCompensate = .02713;
+    if (rand(1) > .8)
+        angSpeedCompensate = .02714;
+    end
     fwdSpeed = .3;
     if isa(serPort,'CreateRobot')
         angSpeedCompensate = 0;
@@ -262,22 +259,22 @@ function moveForward(serPort)
 end
 
 function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLeaveDist, angle)
-    % Compute dist to travel and amount to turn for corner cutting system
-    %
-    % Input:
-    % serPort for checking if real robot
-    % A,B,C - points, B is the center point
-    % recentLeaveDist - how far onto the line A-B we already are
-    % angle - current Angle
-    %
-    % Output:
-    % data -dist to travel and amount to turn
-    % newRecentLeave - how far onto new line we will end up
+% Compute dist to travel and amount to turn for corner cutting system
+%
+% Input:
+% serPort for checking if real robot
+% A,B,C - points, B is the center point
+% recentLeaveDist - how far onto the line A-B we already are
+% angle - current Angle
+%
+% Output:
+% data -dist to travel and amount to turn
+% newRecentLeave - how far onto new line we will end up
 
-    % we can break this up into a series of distances and angles
-    % the distances represent driving straight, the angles are
-    % using our "standard" turn radius which can be set
-    % depending on our turn radius, the distances changes
+% we can break this up into a series of distances and angles
+% the distances represent driving straight, the angles are
+% using our "standard" turn radius which can be set
+% depending on our turn radius, the distances changes
 
     %stuff for the real robot
     measuredTurnDiameter = .98; %old.. 1.1938
@@ -294,18 +291,7 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
     %because we might not be facing exactly the right way, we have to
     %modify our point B to B' that we will actually hit given our
     %trajectory
-
-    %{
-        "There?s a nice approach to this problem that uses vector cross products. 
-        \Define the 2-dimensional vector cross product v × w to be vxwy ? vywx 
-        (this is the magnitude of the 3-dimensional cross product).
-
-        Suppose the two line segments run from p to p + r and from q to q + s. 
-        Then any point on the first line is representable as p + t r (for a scalar parameter t) 
-        and any point on the second line as q + u s (for a scalar parameter
-        u)."
-%}
-    
+        disp(A); disp(B); disp(C);
     p = A(1,1:2);
     q = C;
     r = [cos(angle), sin(angle)];
@@ -316,6 +302,11 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
     t = cross2d((q-p), (s / cross2d(r,s)));
     
     newB = p + t*r;
+    
+    if (newB(1) < p(1))
+        disp('FUCK');
+        newB = B;
+    end
     
     data = zeros(1,2);
 
@@ -328,22 +319,23 @@ function [data, newRecentLeave] = computeDistAndAngle(serPort, A, B, C, recentLe
     newRecentLeave = leaveDist;
 
     data(1) = mydist;
+    
+    fprintf('ANGLE %.3f, DIST %.3f, NEWB: (%.3f, %.3f)\n', myangle, mydist, newB(1), newB(2));
+    
 end
 
 function result = cross2d(v1,v2)
-
-result = v1(1) * v2(2) - v1(2)*v2(1);
-
+    result = v1(1) * v2(2) - v1(2)*v2(1);
 end
 
 function angle = computeAngleBetweenPoints(A, B, C)
-    % Find angle between three points
-    %
-    % Input:
-    % A,B,C - points, B is the center point
-    %
-    % Output:
-    % angle - angle in radians
+% Find angle between three points
+%
+% Input:
+% A,B,C - points, B is the center point
+%
+% Output:
+% angle - angle in radians
 
     ABrise = B(2)-A(2);
     ABrun = B(1)-A(1);
@@ -368,14 +360,14 @@ function dist = computeLeaveLineDist(angle, radius)
 end
 
 function mylikelypoint = getClosestPoint(obstacles,pos)
-    % Find likely collision vertex
-    %
-    % Input:
-    % obstacles - coordinates of the obstacles
-    % pos - where we thought we were
-    %
-    % Output:
-    % mylikelypoint - closest vertex in obstacles to pos
+% Find likely collision vertex
+%
+% Input:
+% obstacles - coordinates of the obstacles
+% pos - where we thought we were
+%
+% Output:
+% mylikelypoint - closest vertex in obstacles to pos
     
     bestDistance = 1000000;
     mylikelypoint = [0,0];
@@ -393,16 +385,16 @@ function mylikelypoint = getClosestPoint(obstacles,pos)
 end
 
 function [intersection,distanceToLine] = pointOnLine(lineStart, lineEnd, point)
-    % Closest point on a line from another point
-    %
-    % Input:
-    % lineStart - first point (x,y) of line
-    % lineEnd - second point (x,y) of line
-    % point - the point not on the line
-    %
-    % Output:
-    % intersection - closest point on the line
-    % distanceToLine - distance from point to intersection
+% Closest point on a line from another point
+%
+% Input:
+% lineStart - first point (x,y) of line
+% lineEnd - second point (x,y) of line
+% point - the point not on the line
+%
+% Output:
+% intersection - closest point on the line
+% distanceToLine - distance from point to intersection
 
     line = (lineEnd-lineStart);
     line = line/norm(line);
@@ -466,7 +458,7 @@ function angTurned = turnRadians(serPort, angToTurn)
 % Output:
 % angTurned - Actual angle turned (rad)
 
-    % compensate
+    % compensate for real robot
     angToTurn = 0.9*angToTurn;
 
     % constants
