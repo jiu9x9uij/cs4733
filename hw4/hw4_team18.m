@@ -612,14 +612,6 @@ function runRobot(serPort, points, obstacles)
     AngleSensorRoomba(serPort); 
     
     % current position and orientation
-    points = [-3.1070,    0.5800;
-   -2.0334,    0.5089;
-   -1.5634,    0.5089;
-    0.2065,    0.7488;
-    0.6765,    0.7488;
-    5.0690,   -0.4417;
-    5.5390,   -0.4417;
-   10.6570,   -0.0300 ];
     pos = [points(1,1), points(1,2), 0];
     qGoal = points(size(points,1),:);
     %turn to face the first point
