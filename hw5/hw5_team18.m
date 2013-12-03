@@ -2,6 +2,33 @@
 % Alden Quimby - adq2101
 % Matthew Dean - mtd2121
 
+%% METHOD FROM ASSIGNMENT %%%%%%%%%%
+
+%{
+a. You will initiate the color tracker manually. Take an image and have the user click on 
+the image color you want to track. This will give you a threshold range for color 
+segmentation. 
+
+b. Threshold the image, and find the largest blob in the image which will be your target 
+(use a large enough target). - apply_mask/find_largest_blob
+
+c. Calculate the centroid and area of the blob (in pixels), and compare it to the previous 
+centroid and area of this blob. If they don?t change, the target hasn?t moved. If they do, 
+you need to move your robot to either increase or decrease the blob area (move 
+forward and back) and rotate to keep the blob centered. 
+
+d. You will have to play a bit with the gains on your robot?s movement, i.e. how fast and 
+far to move to re-adjust the image. Keep in mind you are doing this continuously as 
+each image frame is read in real-time. Given the web link for the images, you probably 
+will only get 2 or 3 frames per second which will help determine how fast to move the 
+robot. You can also reduce the camera resolution to allow faster processing and a 
+possibly higher frame rate. 
+
+e. Move the marker to make the robot follow you. Show that it will stop when you stop, 
+and turn when you turn, etc.
+%}
+
+
 %% MAIN METHOD %%%%%%%%%%%%%%%%%%%%%
 
 function hw5_team18(serPort)
@@ -21,6 +48,12 @@ function hw5_team18(serPort)
 
 end
 
+
+
+
+function blob = find_largest_blob(img)
+
+end
 
 %% DEAN PUT YOUR STUFF HERE %%%%%%%%%%%%%%%%%%%%%
 
