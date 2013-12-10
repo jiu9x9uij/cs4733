@@ -45,6 +45,7 @@ function hw5_team18(serPort)
     AngleSensorRoomba(serPort); 
     
     
+    % now do either part 1 or part 2 based on input
     
     
     color_tracker(serPort);
