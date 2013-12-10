@@ -443,7 +443,6 @@ function door_finder(serPort)
     while ~found
         img = imread(url);
         [found, door] = find_door(img);
-        imshow(door); drawnow;
     end
 
     disp('stop_robot');
@@ -474,7 +473,7 @@ function door_finder(serPort)
     angle = get_angle_from_door(door);
 
         disp('turn_angle');
-    turn_angle(serPort, angle);
+    turn_angle(serPort, angle * pi/180);
     
     disp('perform_door_knock');
     perform_door_knock(serPort);
@@ -499,9 +498,46 @@ end
 
 function [door_mask] = find_doors(img, edge_mask, color)
     %edge_mask will be null for now
+    blended = blend_image(img);
+    figure(1);
+    imshow(blended);
     smooth = smooth_image(img);
-    expanded = expand_colors(img);
+    figure(2);
+    imshow(smooth);
+    expanded = expand_colors(smooth);
+    figure(3);
+    imshow(expanded);
     door_mask = apply_mask(expanded, color, 20, .05);
+    figure(4);
+    imshow(door_mask);
+    drawnow;
+
+end
+
+function blended = blend_image(img)
+
+    saturated = im2bw(rgb2gray(img), .8);
+
+    mfImg = img;
+    mfImg(:,:,1)=medfilt2(img(:,:,1), [100,100]);
+    mfImg(:,:,2)=medfilt2(img(:,:,2), [100,100]);
+    mfImg(:,:,3)=medfilt2(img(:,:,3), [100,100]);
+    blended = mask_image(1-saturated, img) + mask_image(saturated, mfImg);
+
+end
+
+function masked = mask_image(mask, img)
+    s = size(img);
+    rows = s(1);
+    cols = s(2);
+    masked = img;
+    for row = 1:rows
+        for col = 1:cols
+            if(~mask(row,col))
+                masked(row,col,:) = 0;
+            end
+        end
+    end
 
 end
 
@@ -537,8 +573,6 @@ function expanded = expand_colors(img)
     expanded(:,:,3) = histeq(expanded(:,:,3));
     %}
     newImg = decorrstretch(img);
-
-    expanded = imadjust(img,stretchlim(img),[]);
     expanded = imlincomb(.7, img, .3, newImg);
 
     s = size(img);
@@ -654,7 +688,7 @@ end
 
 function drive_straight(serPort, fwdSpeed)
 
-    angCompensate = 0.0904;
+    angCompensate = 0.0;
 
     SetFwdVelAngVelCreate(serPort, fwdSpeed, angCompensate*fwdSpeed);
 
