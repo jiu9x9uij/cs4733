@@ -86,6 +86,7 @@ function color_tracker(serPort)
         %[size_change, horizontal_change] = analyzeBlobs(originalBlob, blob);
         [newPixels, centroid] = analyzeBlob(blob);
         imshow(blob);
+        drawnow;
         size_change = newPixels / originalPixels;
         center = size(img,2)/2;
         horizontal_change = (centroid(2) - center)/center;
@@ -145,6 +146,7 @@ function blob = get_largest_blob(img)
     s = size(img);
     height = s(1);
     width = s(2);
+    blob = zeros(height, width);
     for row = 1:height
        for col = 1:width
            if(img(row,col)==1)
@@ -157,7 +159,6 @@ function blob = get_largest_blob(img)
            end
        end
     end
-    imshow(blob);
 end
 
 
@@ -285,8 +286,6 @@ function masked = apply_mask(img, color)
     end
     
     masked = ratioMasked | masked;
-    imshow(masked);
-    drawnow;
 
 end
 
@@ -375,6 +374,8 @@ function move_robot(serPort, size_change, horizontal_change)
 % horizontal_change - Ratio of centroid_horizontal_movement to max centroid
 %   horizontal movement, which is based on image size. Should be -1<x<1.
 
+    %{
+
     % keep track of position for debugging
     persistent pos;
     if isempty(pos)
@@ -384,7 +385,7 @@ function move_robot(serPort, size_change, horizontal_change)
     % read sensors
     dist = DistanceSensorRoomba(serPort);
     ang = AngleSensorRoomba(serPort);
-    [br, bl, bf] = check_for_bump(serPort);
+
     % update odometry
     pos(3) = mod(pos(3) + ang, 2*pi);
     pos(1) = pos(1) + dist * cos(pos(3));
@@ -394,8 +395,10 @@ function move_robot(serPort, size_change, horizontal_change)
     % fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
     plot_position(pos);
 
+    %}
+
     % handle bump
-    if (br || bl || bf)
+    if checkForBump(serPort)
         throw('OH NO I BUMPED!');
     end
     
@@ -418,8 +421,8 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
 %   horizontal movement, which is based on image size. Should be -1<x<1.
 
     % CONSTANTS
-    MAX_FWD_VEL = 0.3; % max allowable forward velocity (m/s)
-    MAX_ANG_VEL = 0.3; % max allowable angular velocity (rad/s)
+    MAX_FWD_VEL = 0.2; % max allowable forward velocity (m/s)
+    MAX_ANG_VEL = 0.2; % max allowable angular velocity (rad/s)
     
     % DESIRED OUTPUTS BASED ON INPUTS
     % 
@@ -442,7 +445,7 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
         size_change = size_change + size_buff;
     end
     
-    if abs(size_change - 1) < size_change
+    if abs(size_change - 1) < size_buff
         fwd_vel = 0;
     else
 
