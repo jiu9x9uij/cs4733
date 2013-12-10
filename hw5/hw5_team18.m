@@ -2,36 +2,9 @@
 % Alden Quimby - adq2101
 % Matthew Dean - mtd2121
 
-%% METHOD FROM ASSIGNMENT %%%%%%%%%%
-
-%{
-a. You will initiate the color tracker manually. Take an image and have the user click on 
-the image color you want to track. This will give you a threshold range for color 
-segmentation. 
-
-b. Threshold the image, and find the largest blob in the image which will be your target 
-(use a large enough target). - apply_mask/find_largest_blob
-
-c. Calculate the centroid and area of the blob (in pixels), and compare it to the previous 
-centroid and area of this blob. If they don?t change, the target hasn?t moved. If they do, 
-you need to move your robot to either increase or decrease the blob area (move 
-forward and back) and rotate to keep the blob centered. 
-
-d. You will have to play a bit with the gains on your robot?s movement, i.e. how fast and 
-far to move to re-adjust the image. Keep in mind you are doing this continuously as 
-each image frame is read in real-time. Given the web link for the images, you probably 
-will only get 2 or 3 frames per second which will help determine how fast to move the 
-robot. You can also reduce the camera resolution to allow faster processing and a 
-possibly higher frame rate. 
-
-e. Move the marker to make the robot follow you. Show that it will stop when you stop, 
-and turn when you turn, etc.
-%}
-
-
 %% MAIN METHOD %%%%%%%%%%%%%%%%%%%%%
 
-function hw5_team18(serPort)
+function hw5_team18(serPort, part_2)
 
     % clear any persitent variables in functions
     clear functions;
@@ -44,21 +17,24 @@ function hw5_team18(serPort)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort); 
     
+    if part_2
+        door_finder(serPort);
+    else
+        color_tracker(serPort);
+    end
     
-    % now do either part 1 or part 2 based on input
-    
-    
-    color_tracker(serPort);
+end
 
+function [url] = camera_url()
+    camera_ip = '192.168.1.100';
+    url = strcat('http://', camera_ip, '/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0');
 end
 
 
-
-%% DEAN PUT YOUR STUFF HERE %%%%%%%%%%%%%%%%%%%%%
+%% COLOR TRACKER %%%%%%%%%%%%%%%%%%%%%
 
 function color_tracker(serPort)
-    camera_ip = '192.168.1.100';
-    url = strcat('http://', camera_ip, '/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0');
+    url = camera_url();
     % one time stuff for user to choose color
     % HAVE USER SELECT COLOR
     startImg = imread(url);
@@ -140,7 +116,6 @@ function [ pos ] = ChoosePoint( img )
 
 end
 
-
 function blob = get_largest_blob(img)
     biggestBlobCount = 0;
     s = size(img);
@@ -160,7 +135,6 @@ function blob = get_largest_blob(img)
        end
     end
 end
-
 
 function [blob, count] = growBlob(img, row, col)
     max_size = 300;
@@ -232,7 +206,6 @@ function img = getImage(location)
     input = imread(location);
     img = smooth_image(input);
 end
-
 
 function masked = apply_mask(img, color)
 % Filter out everything except stuff within range of our color
@@ -321,48 +294,6 @@ function smim = smooth_image(im)
 end
 
 
-
-
-
-function fake_color_tracker(serPort)
-% DEMO COLOR TRACKER
-% Go fwd and right for 6s
-% Spin left for 6s
-% Go back for 6s
-% Stop for 2s
-% Done
-
-    tStart = tic;
-
-    while true
-
-        % simulate image read delay
-        pause(0.3);
-        
-        if (toc(tStart) < 6)            
-            size_change = 0.5 + rand/2; % rand between 0.5 and 1 (forward)
-            horizontal_change = rand;   % rand between 0 and 1 (right)
-        elseif (toc(tStart) < 12)
-            size_change = 1;            % no forward motion
-            horizontal_change = -rand;  % rand between 0 and -1 (left)
-        elseif (toc(tStart) < 18)
-            size_change = 1 + rand;     % rand between 1 and 2 (backward)
-            horizontal_change = 0;      % no angular motion
-        elseif (toc(tStart) < 20)
-            size_change = 1;            % no forward motion
-            horizontal_change = 0;      % no angular motion
-        else
-            break;
-        end
-        
-        move_robot(serPort, size_change, horizontal_change);
-        
-    end
-    
-end
-
-
-
 %% MOVE ROBOT %%%%%%%%%%%%%%%%%%%%%
 
 function move_robot(serPort, size_change, horizontal_change)
@@ -439,9 +370,9 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
     % if change btwn [-buff,buff], don't move
     size_buff = 0.05;
     
-    if size_change > 1
+    if size_change > 1 + size_buff
         size_change = size_change - size_buff;
-    else
+    elseif size_change < 1 - size_buff
         size_change = size_change + size_buff;
     end
     
@@ -467,9 +398,9 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
     % if change btwn [-buff,buff], don't move
     horiz_buff = 0.1;
     
-    if horizontal_change > 0
+    if horizontal_change > horiz_buff
         horizontal_change = horizontal_change - horiz_buff;
-    else
+    elseif horizontal_change < -horiz_buff
         horizontal_change = horizontal_change + horiz_buff;
     end
     
@@ -501,7 +432,70 @@ function [BumpRight, BumpLeft, BumpFront] = check_for_bump(serPort)
 end
 
 
-%% EDGE/FIND A DOOR CODE %%%%%%
+%% DOOR FINDER %%%%%%
+
+function door_finder(serPort)
+
+        disp('door_finder');
+
+
+    fwdSpeed = 0.1;
+    found = 0;
+    door = 0;
+    
+    url = camera_url();
+    drive_straight(serPort, fwdSpeed);
+    
+    while ~found
+        img = imread(url);
+        [found, door] = find_door(img);
+        imshow(door); drawnow;
+    end
+
+        disp('stop_robot');
+    stop_robot(serPort);
+    
+        disp('get_angle_from_door');
+    angle = get_angle_from_door(door);
+    
+        disp('drive_to_door');
+    drive_to_door(serPort, angle);
+    
+        disp('face_door');
+    face_door(serPort, angle);
+    
+            disp('find_door');
+img = imread(url);
+    [found, door] = find_door(img);
+    imshow(door); drawnow;
+    
+    if ~found
+        disp('OH NO, LOST THE DOOR! Starting over and trying again.')
+        face_door(serPort, -angle);
+        door_finder(serPort);
+        return;
+    end
+    
+        disp('turn_angle');
+    angle = get_angle_from_door(door);
+
+        disp('turn_angle');
+    turn_angle(serPort, angle);
+    
+    disp('perform_door_knock');
+    %perform_door_knock(serPort);
+    
+end
+
+function [found, door] = find_door(img)
+
+    DOOR_COLOR = [99,106,121];
+
+    door_mask = find_doors(img, 0, DOOR_COLOR);
+    
+    [found, door] = find_largest_door(door_mask);
+
+end
 
 %for now let's not worry about this guy...
 function [edge_mask] = find_vertical_edges(img)
@@ -524,14 +518,10 @@ function [found, door] = find_largest_door(door_mask)
     screen = s(1) * s(2);
     blob_size = sum(sum(door)); %THIS WORKS, TESTED IT
     
-    if(blob_size > screen * thresh)
-        found = true;
-    else
-        found = false;
-    end
+    found = blob_size > screen * thresh;
 end
 
-function [angle] = compute_dist_to_door(door)
+function [angle] = get_angle_from_door(door)
     [~, centroid] = analyzeBlob(blob);
     center = size(door,2)/2;
     horizontal = (centroid(2) - center)/center;
@@ -540,45 +530,31 @@ end
 
 function [angle] = angle_from_horizontal(horizontal)
     %constants to tweak:
-    distance_to_plane = 1; %guessing like 1 meter... idk.
-    width_of_plane = 1; %again just guessing for now
+    distance_to_plane = 1; % pick 1m
+    width_of_plane = 0.85; % measured with camera
     
-    half_angle = atand((width_of_plane/2)/distance_to_plane)
-    angle = half_angle * horizontal;
+    half_angle = atand((width_of_plane/2)/distance_to_plane);
+    angle = half_angle * -horizontal;
     %positive is to the right, negative is to the left..
     %can change that obvs
-end
-
-function drive_to_and_face_door(serPort, angle)
-
-    % hard-coded center of hallway is 0.9m from wall
-    distance_to_wall = .9;
-    %tan(big_ang) = rise/run;
-    dist = distance_to_wall * tan(90-angle); % think this is right...
-    
-
-
-
-end
-
-function correct_angle(serPort)
-% call find_largest_door, compute angle and then turn that angle
-
 end
 
 function perform_door_knock(serPort)
 
     fwdSpeed = 0.2;
+    time_back = 0.5;
     
     drive_to_bump(serPort, fwdSpeed);
     
-    drive_time(serPort, -fwdSpeed, 1);
+    drive_time(serPort, -fwdSpeed, time_back);
     
     drive_to_bump(serPort, fwdSpeed);
     
-    drive_time(serPort, -fwdSpeed, 1);
+    drive_time(serPort, -fwdSpeed, time_back);
     
-    drive_forward(serPort, fwdSpeed, 1);
+    BeepRoomba(serPort);
+    pause(1);
+    drive_forward(serPort, fwdSpeed, 1.5);
     
 end
 
@@ -592,44 +568,6 @@ function drive_to_bump(serPort, fwdSpeed)
     end
     
     stop_robot(serPort);
-    
-end
-
-function door_finder(serPort)
-
-    fwdSpeed = 0.1;
-    found = 0;
-    door = 0;
-    
-    drive_straight(serPort, fwdSpeed);
-    
-    while ~found
-        img = imread('photo1.jpg');
-        [found, door] = find_door(img);
-    end
-
-    stop_robot(serPort);
-    
-    angle = get_angle_from_door(door);
-    
-    drive_to_door(serPort, angle);
-    
-    face_door(serPort, angle);
-    
-    img = imread('photo1.jpg');
-    [found, door] = find_door(img);
-
-    if ~found
-        disp('OH NO, LOST THE DOOR! Starting over and trying again.')
-        face_door(serPort, -angle);
-        door_finder(serPort);
-    end
-    
-    angle = get_angle_from_door(door);
-
-    turn_angle(serPort, angle);
-    
-    perform_door_knock(serPort);
     
 end
 
@@ -676,7 +614,7 @@ end
 function drive_time(serPort, fwdSpeed, time)
 
     t = tic;
-    drive_straight(serPort, -fwdSpeed);
+    drive_straight(serPort, fwdSpeed);
     while (toc(t) < time)
     end
     
