@@ -469,35 +469,61 @@ end
 
 %% EDGE/FIND A DOOR CODE %%%%%%
 
+%for now let's not worry about this guy...
 function [edge_mask] = find_vertical_edges(img)
 
 
 end
 
 function [door_mask] = find_doors(img, edge_mask, color)
-
+    %edge_mask will be null for now
+    smooth = smooth_image(img);
+    door_mask = apply_mask(smooth, color);
 
 end
 
 function [found, door] = find_largest_door(door_mask)
-
-
-
+    door = get_largest_blob(door_mask);
+    thresh = .05; % PERCENT OF ENTIRE PIC
+    
+    s = size(door_mask);
+    screen = s(1) * s(2);
+    blob_size = sum(sum(door)); %THIS WORKS, TESTED IT
+    
+    if(blob_size > screen * thresh)
+        found = true;
+    else
+        found = false;
+    end
 end
 
-function [angle] = compute_angle_to_door(door)
-
-
+function [angle] = compute_dist_to_door(door)
+    [~, centroid] = analyzeBlob(blob);
+    center = size(door,2)/2;
+    horizontal = (centroid(2) - center)/center;
+    angle = angle_from_horizontal(horizontal);
 end
 
 function [angle] = angle_from_horizontal(horizontal)
-
-
+    %constants to tweak:
+    distance_to_plane = 1; %guessing like 1 meter... idk.
+    width_of_plane = 1; %again just guessing for now
+    
+    half_angle = atand((width_of_plane/2)/distance_to_plane)
+    angle = half_angle * horizontal;
+    %positive is to the right, negative is to the left..
+    %can change that obvs
 end
 
 function drive_to_and_face_door(serPort, angle)
 
-% hard-coded center of hallway is 0.9m from wall
+    % hard-coded center of hallway is 0.9m from wall
+    distance_to_wall = .9;
+    %tan(big_ang) = rise/run;
+    dist = distance_to_wall * tan(90-angle); % think this is right...
+    
+
+
 
 end
 
