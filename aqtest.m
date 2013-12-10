@@ -4,19 +4,25 @@ function aqtest()
     camera_ip = '192.168.1.100';
     url = strcat('http://', camera_ip, '/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0');
 
-    color = [197,60,20];
+    color = [100,100,130];
     
     count = 0;
     t = tic;
-    while toc(t) < 10
+    while toc(t) < 2
         count = count + 1;
         img = imread(url);
         img = smooth_image(img);
+        img = expand_colors(img);
         masked = apply_mask(img, color);
         blob = get_largest_blob(masked);
         analyzeBlob(blob);
         
+        figure(1);
         imshow(img);
+        figure(2);
+        imshow(masked);
+        figure(3);
+        imshow(blob);
         drawnow;
     end
     
@@ -25,6 +31,35 @@ function aqtest()
 end
 
 
+function expanded = expand_colors(img)
+%{
+hsv_image = rgb2hsv(img);
+hsv_image(:,:,2) = 1;
+expanded = hsv2rgb(hsv_image);
+
+expanded = img;
+expanded(:,:,1) = histeq(img(:,:,1));
+expanded(:,:,2) = histeq(img(:,:,2));
+expanded(:,:,3) = histeq(expanded(:,:,3));
+%}
+newImg = decorrstretch(img);
+
+expanded = imadjust(img,stretchlim(img),[]);
+expanded = imlincomb(.7, img, .3, newImg);
+
+s = size(img);
+height = s(1);
+width = s(2);
+bad = im2bw(rgb2gray(expanded),.7);
+for row = 1:height
+    for col = 1:width
+        if(bad(row,col))
+            expanded(row,col,:) = 0;
+        end
+    end
+end
+
+end
 
 
 function masked = apply_mask(img, color)
@@ -45,7 +80,7 @@ function masked = apply_mask(img, color)
     blue = double(color(3));
 
 
-    thresh = 50; % how much above or below desired color in either r g or b
+    thresh = 20; % how much above or below desired color in either r g or b
     
 
     masked = img(:,:,1) < red + thresh & ...
@@ -59,7 +94,7 @@ function masked = apply_mask(img, color)
     height = s(1);
     width = s(2);
     ratioMasked = zeros(s(1),s(2));
-    ratioThresh = .08;
+    ratioThresh = 0.05;
     total = red + green + blue;
     ratioR = red / total;
     ratioG = green/total;
@@ -85,7 +120,7 @@ end
 function smim = smooth_image(im)
 
     % 5 works for now
-    sigma = 5;
+    sigma = 4;
     
     %assert(ndims(im) == 2, 'Image must be greyscale');
     

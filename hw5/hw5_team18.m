@@ -46,7 +46,7 @@ function color_tracker(serPort)
     color = [color(1), color(2), color(3)];
     disp(color);
     %at this point we have the desired color, removing anomolies
-    masked = apply_mask(startSmooth, color);
+    masked = apply_mask(startSmooth, color, 50, .08);
     originalBlob = get_largest_blob(masked);
     [originalPixels, ~] = analyzeBlob(originalBlob);
     while true
@@ -54,7 +54,7 @@ function color_tracker(serPort)
         %ask for image
         img = getImage(url);
         %get correct blob
-        masked = apply_mask(img, color);
+        masked = apply_mask(img, color, 50, .08);
         blob = get_largest_blob(masked);
         
         
@@ -207,7 +207,7 @@ function img = getImage(location)
     img = smooth_image(input);
 end
 
-function masked = apply_mask(img, color)
+function masked = apply_mask(img, color, thresh, ratioThresh)
 % Filter out everything except stuff within range of our color
 % TODO - why/how did them peeps use proportional masks??
 %
@@ -224,10 +224,6 @@ function masked = apply_mask(img, color)
     green = double(color(2));
     blue = double(color(3));
 
-
-    thresh = 50; % how much above or below desired color in either r g or b
-    
-
     masked = img(:,:,1) < red + thresh & ...
              img(:,:,1) > red - thresh & ...
              img(:,:,2) < green + thresh & ...
@@ -239,7 +235,6 @@ function masked = apply_mask(img, color)
     height = s(1);
     width = s(2);
     ratioMasked = zeros(s(1),s(2));
-    ratioThresh = .08;
     total = red + green + blue;
     ratioR = red / total;
     ratioG = green/total;
@@ -436,8 +431,7 @@ end
 
 function door_finder(serPort)
 
-        disp('door_finder');
-
+    disp('door_finder');
 
     fwdSpeed = 0.1;
     found = 0;
@@ -452,20 +446,20 @@ function door_finder(serPort)
         imshow(door); drawnow;
     end
 
-        disp('stop_robot');
+    disp('stop_robot');
     stop_robot(serPort);
     
-        disp('get_angle_from_door');
+    disp('get_angle_from_door');
     angle = get_angle_from_door(door);
     
-        disp('drive_to_door');
+    disp('drive_to_door');
     drive_to_door(serPort, angle);
     
         disp('face_door');
     face_door(serPort, angle);
     
-            disp('find_door');
-img = imread(url);
+    disp('find_door');
+    img = imread(url);
     [found, door] = find_door(img);
     imshow(door); drawnow;
     
@@ -483,13 +477,13 @@ img = imread(url);
     turn_angle(serPort, angle);
     
     disp('perform_door_knock');
-    %perform_door_knock(serPort);
+    perform_door_knock(serPort);
     
 end
 
 function [found, door] = find_door(img)
 
-    DOOR_COLOR = [99,106,121];
+    DOOR_COLOR = [100,106,130]; %NOT ACCURATE, AFTER FILTERS
 
     door_mask = find_doors(img, 0, DOOR_COLOR);
     
@@ -506,7 +500,8 @@ end
 function [door_mask] = find_doors(img, edge_mask, color)
     %edge_mask will be null for now
     smooth = smooth_image(img);
-    door_mask = apply_mask(smooth, color);
+    expanded = expand_colors(img);
+    door_mask = apply_mask(expanded, color, 20, .05);
 
 end
 
@@ -522,11 +517,44 @@ function [found, door] = find_largest_door(door_mask)
 end
 
 function [angle] = get_angle_from_door(door)
-    [~, centroid] = analyzeBlob(blob);
+    [~, centroid] = analyzeBlob(door);
     center = size(door,2)/2;
     horizontal = (centroid(2) - center)/center;
     angle = angle_from_horizontal(horizontal);
+    disp('HOR, ANGL');
+    disp([horizontal, angle]);
 end
+
+function expanded = expand_colors(img)
+    %{
+    hsv_image = rgb2hsv(img);
+    hsv_image(:,:,2) = 1;
+    expanded = hsv2rgb(hsv_image);
+
+    expanded = img;
+    expanded(:,:,1) = histeq(img(:,:,1));
+    expanded(:,:,2) = histeq(img(:,:,2));
+    expanded(:,:,3) = histeq(expanded(:,:,3));
+    %}
+    newImg = decorrstretch(img);
+
+    expanded = imadjust(img,stretchlim(img),[]);
+    expanded = imlincomb(.7, img, .3, newImg);
+
+    s = size(img);
+    height = s(1);
+    width = s(2);
+    bad = im2bw(rgb2gray(expanded),.7);
+    for row = 1:height
+        for col = 1:width
+            if(bad(row,col))
+                expanded(row,col,:) = 0;
+            end
+        end
+    end
+
+end
+
 
 function [angle] = angle_from_horizontal(horizontal)
     %constants to tweak:
@@ -554,7 +582,7 @@ function perform_door_knock(serPort)
     
     BeepRoomba(serPort);
     pause(1);
-    drive_forward(serPort, fwdSpeed, 1.5);
+    drive_distance(serPort, fwdSpeed, .69); % lol
     
 end
 
@@ -576,7 +604,9 @@ function drive_to_door(serPort, angle)
     dist_to_wall = 0.9;
     fwdSpeed = 0.2;
     
-    dist_to_drive = dist_to_wall/tan(abs(angle));
+    dist_to_drive = dist_to_wall/tand(abs(angle));
+    disp('DIST TO DRIVE');
+    disp(dist_to_drive);
     
     drive_distance(serPort, fwdSpeed, dist_to_drive);
     
