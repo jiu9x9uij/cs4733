@@ -57,15 +57,18 @@ end
 %% DEAN PUT YOUR STUFF HERE %%%%%%%%%%%%%%%%%%%%%
 
 function color_tracker(serPort)
-    
+    camera_ip = '192.168.1.100';
+    url = strcat('http://', camera_ip, '/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0');
     % one time stuff for user to choose color
     % HAVE USER SELECT COLOR
-    startImg = imread('http://10.0.0.23/snapshot.cgi?user=admin&pwd=&resolution=32&rate=0');
+    startImg = imread(url);
     p = ChoosePoint(startImg);
     startSmooth = smooth_image(startImg);
-   
+    disp(p);
     color = startSmooth(p(2),p(1),:);
+    disp('COLOR: ');
     color = [color(1), color(2), color(3)];
+    disp(color);
     %at this point we have the desired color, removing anomolies
     masked = apply_mask(startSmooth, color);
     originalBlob = get_largest_blob(masked);
@@ -73,7 +76,7 @@ function color_tracker(serPort)
     while true
         
         %ask for image
-        img = getImage('http://10.0.0.23/snapshot.cgi?user=admin&pwd=&resolution=32&rate=0');
+        img = getImage(url);
         %get correct blob
         masked = apply_mask(img, color);
         blob = get_largest_blob(masked);
@@ -242,7 +245,7 @@ function masked = apply_mask(img, color)
 % Ouput:
 % masked - the image mask
     
-    
+
     red = double(color(1));
     green = double(color(2));
     blue = double(color(3));
@@ -262,7 +265,7 @@ function masked = apply_mask(img, color)
     height = s(1);
     width = s(2);
     ratioMasked = zeros(s(1),s(2));
-    ratioThresh = .15;
+    ratioThresh = .08;
     total = red + green + blue;
     ratioR = red / total;
     ratioG = green/total;
@@ -282,8 +285,8 @@ function masked = apply_mask(img, color)
     end
     
     masked = ratioMasked | masked;
-         
     imshow(masked);
+    drawnow;
 
 end
 
@@ -380,9 +383,8 @@ function move_robot(serPort, size_change, horizontal_change)
 
     % read sensors
     dist = DistanceSensorRoomba(serPort);
-    ang = AngleSensorRoomba(serPort);  
+    ang = AngleSensorRoomba(serPort);
     [br, bl, bf] = check_for_bump(serPort);
-
     % update odometry
     pos(3) = mod(pos(3) + ang, 2*pi);
     pos(1) = pos(1) + dist * cos(pos(3));
@@ -394,8 +396,7 @@ function move_robot(serPort, size_change, horizontal_change)
 
     % handle bump
     if (br || bl || bf)
-        disp('OH NO I BUMPED!');
-        exit(1);
+        throw('OH NO I BUMPED!');
     end
     
     % update robot velocities
@@ -417,8 +418,8 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
 %   horizontal movement, which is based on image size. Should be -1<x<1.
 
     % CONSTANTS
-    MAX_FWD_VEL = 0.4; % max allowable forward velocity (m/s)
-    MAX_ANG_VEL = 0.4; % max allowable angular velocity (rad/s)
+    MAX_FWD_VEL = 0.3; % max allowable forward velocity (m/s)
+    MAX_ANG_VEL = 0.3; % max allowable angular velocity (rad/s)
     
     % DESIRED OUTPUTS BASED ON INPUTS
     % 
@@ -432,19 +433,48 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
     % -1                --> MAX_ANG_VEL
     % 1                 --> -MAX_ANG_VEL
 
-    if size_change > 2
-        fwd_vel = -MAX_FWD_VEL;
-    elseif size_change < 0.5
-        fwd_vel = MAX_FWD_VEL;
-    elseif size_change > 1
-        fwd_vel = -MAX_FWD_VEL * (size_change - 1);
-    elseif size_change < 1
-        fwd_vel = 2 * MAX_FWD_VEL * (1 - size_change);
+    % if change btwn [-buff,buff], don't move
+    size_buff = 0.05;
+    
+    if size_change > 1
+        size_change = size_change - size_buff;
     else
-        fwd_vel = 0;
+        size_change = size_change + size_buff;
     end
     
-    ang_vel = horizontal_change * -MAX_ANG_VEL;
+    if abs(size_change - 1) < size_change
+        fwd_vel = 0;
+    else
+
+        if size_change > 2
+            fwd_vel = -MAX_FWD_VEL;
+        elseif size_change < 0.5
+            fwd_vel = MAX_FWD_VEL;
+        elseif size_change > 1
+            fwd_vel = -MAX_FWD_VEL * (size_change - 1);
+        elseif size_change < 1
+            fwd_vel = 2 * MAX_FWD_VEL * (1 - size_change);
+        else
+            fwd_vel = 0;
+        end
+        
+    end
+
+       
+    % if change btwn [-buff,buff], don't move
+    horiz_buff = 0.1;
+    
+    if horizontal_change > 0
+        horizontal_change = horizontal_change - horiz_buff;
+    else
+        horizontal_change = horizontal_change + horiz_buff;
+    end
+    
+    if abs(horizontal_change) < horiz_buff
+        ang_vel = 0;
+    else
+        ang_vel = horizontal_change * -MAX_ANG_VEL;
+    end
     
 end
 
