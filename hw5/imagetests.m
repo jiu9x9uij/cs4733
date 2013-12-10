@@ -8,8 +8,8 @@ starterImage = getImage('photo1.jpg');
 %so we need to use position, then use the color after gaussian
 color = ChoosePoint(starterImage);
 masked = apply_mask(starterImage, color);
-get_largest_blob(masked);
-%{
+%get_largest_blob(masked);
+
 pause(2)
 img2 = getImage('photo2.jpg');
 apply_mask(img2, color);
@@ -21,7 +21,7 @@ apply_mask(img3, color);
 pause(2)
 img4 = getImage('photo4.jpg');
 apply_mask(img4, color);
-%}
+
 
 end
 
@@ -43,7 +43,7 @@ disp('get largest');
            end
        end
     end
-    imshow(blob);
+    imshow(img);
 end
 
 
@@ -134,12 +134,13 @@ function masked = apply_mask(img, color)
 % masked - the image mask
     
     
-    red = color(1);
-    green = color(2);
-    blue = color(3);
+    red = double(color(1));
+    green = double(color(2));
+    blue = double(color(3));
+
 
     thresh = 50; % how much above or below desired color in either r g or b
-
+    
 
     masked = img(:,:,1) < red + thresh & ...
              img(:,:,1) > red - thresh & ...
@@ -147,8 +148,33 @@ function masked = apply_mask(img, color)
              img(:,:,2) > green - thresh & ...
              img(:,:,3) < blue + thresh & ...
              img(:,:,3) > blue - thresh;
+    
+    s = size(img);
+    height = s(1);
+    width = s(2);
+    ratioMasked = zeros(s(1),s(2));
+    ratioThresh = .15;
+    total = red + green + blue;
+    ratioR = red / total;
+    ratioG = green/total;
+    ratioB = blue/total;
+    %fprintf('%.3f %.3f  %.3f  %.3f', total, ratioR, ratioG, ratioB);
+    for row = 1:height
+        for col = 1:width
+            localColor = double(img(row,col,:));
+            localTotal = localColor(1) + localColor(2) + localColor(3);
+            redPassed = abs(ratioR - (localColor(1) / localTotal)) < ratioThresh;
+            greenPassed = abs(ratioG - (localColor(2) / localTotal)) < ratioThresh;
+            bluePassed = abs(ratioB - (localColor(3) / localTotal)) < ratioThresh;
+            if(redPassed && greenPassed && bluePassed)
+               ratioMasked(row,col) = 1; 
+            end
+        end
+    end
+    
+    masked = ratioMasked | masked;
          
-    %imshow(masked);
+    imshow(masked);
 
 end
 

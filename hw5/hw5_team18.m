@@ -59,7 +59,7 @@ function color_tracker(serPort)
     
     % one time stuff for user to choose color
     % HAVE USER SELECT COLOR
-    startImg = imread('photo1.jpg');
+    startImg = imread('http://10.0.0.23/snapshot.cgi?user=admin&pwd=&resolution=32&rate=0');
     p = ChoosePoint(startImg);
     startSmooth = smooth_image(startImg);
    
@@ -72,7 +72,7 @@ function color_tracker(serPort)
     while true
         
         %ask for image
-        img = getImage('photo1.jpg');
+        img = getImage('http://10.0.0.23/snapshot.cgi?user=admin&pwd=&resolution=32&rate=0');
         %get correct blob
         masked = apply_mask(img, color);
         blob = get_largest_blob(masked);
@@ -81,13 +81,14 @@ function color_tracker(serPort)
         %analyze blob for horizontal and size
         %[size_change, horizontal_change] = analyzeBlobs(originalBlob, blob);
         [newPixels, centroid] = analyzeBlob(blob);
+        imshow(blob);
         size_change = newPixels / originalPixels;
         center = size(img,2)/2;
         horizontal_change = (centroid(2) - center)/center;
         
         %call move robot stuff
         move_robot(serPort, size_change, horizontal_change);
-        
+        fprintf('SIZE CHANGE: %.3f    HORIZONTAL:  %.3f\n', size_change, horizontal_change);     
     end
 
 
@@ -103,7 +104,7 @@ function [pixels, centroid] = analyzeBlob(blob)
     width = s(2);
     for row = 1:height
        for col = 1:width
-           if(img(row,col)==1)
+           if(blob(row,col)==1)
               centroid = centroid + [row,col];
               pixels = pixels + 1;
            end
@@ -136,7 +137,6 @@ end
 
 
 function blob = get_largest_blob(img)
-disp('get largest');
     biggestBlobCount = 0;
     s = size(img);
     height = s(1);
@@ -158,7 +158,6 @@ end
 
 
 function [blob, count] = growBlob(img, row, col)
-disp('grow!');
     max_size = 300;
     q = zeros(max_size,2);
     queue_front = 0;
@@ -173,7 +172,6 @@ disp('grow!');
     queue_back = incr_queue(queue_back, max_size);
     
     q(queue_back,:) = [row,col];
-    disp('begin loop!');
     added = 0;
     while(queue_back~=queue_front)
         %pop off the queue
@@ -227,7 +225,7 @@ function img = getImage(location)
 % img - the image post filter
 
     input = imread(location);
-    img = smooth_image(input,5); % this is sigma for gaussian
+    img = smooth_image(input);
 end
 
 
@@ -244,12 +242,13 @@ function masked = apply_mask(img, color)
 % masked - the image mask
     
     
-    red = color(1);
-    green = color(2);
-    blue = color(3);
+    red = double(color(1));
+    green = double(color(2));
+    blue = double(color(3));
+
 
     thresh = 50; % how much above or below desired color in either r g or b
-
+    
 
     masked = img(:,:,1) < red + thresh & ...
              img(:,:,1) > red - thresh & ...
@@ -257,8 +256,33 @@ function masked = apply_mask(img, color)
              img(:,:,2) > green - thresh & ...
              img(:,:,3) < blue + thresh & ...
              img(:,:,3) > blue - thresh;
+    
+    s = size(img);
+    height = s(1);
+    width = s(2);
+    ratioMasked = zeros(s(1),s(2));
+    ratioThresh = .15;
+    total = red + green + blue;
+    ratioR = red / total;
+    ratioG = green/total;
+    ratioB = blue/total;
+    %fprintf('%.3f %.3f  %.3f  %.3f', total, ratioR, ratioG, ratioB);
+    for row = 1:height
+        for col = 1:width
+            localColor = double(img(row,col,:));
+            localTotal = localColor(1) + localColor(2) + localColor(3);
+            redPassed = abs(ratioR - (localColor(1) / localTotal)) < ratioThresh;
+            greenPassed = abs(ratioG - (localColor(2) / localTotal)) < ratioThresh;
+            bluePassed = abs(ratioB - (localColor(3) / localTotal)) < ratioThresh;
+            if(redPassed && greenPassed && bluePassed)
+               ratioMasked(row,col) = 1; 
+            end
+        end
+    end
+    
+    masked = ratioMasked | masked;
          
-    %imshow(masked);
+    imshow(masked);
 
 end
 
@@ -441,6 +465,55 @@ function [BumpRight, BumpLeft, BumpFront] = check_for_bump(serPort)
     end
     
 end
+
+
+%% EDGE/FIND A DOOR CODE %%%%%%
+
+function [edge_mask] = find_vertical_edges(img)
+
+
+end
+
+function [door_mask] = find_doors(img, edge_mask, color)
+
+
+end
+
+function [found, door] = find_largest_door(door_mask)
+
+
+
+end
+
+function [angle] = compute_angle_to_door(door)
+
+
+end
+
+function [angle] = angle_from_horizontal(horizontal)
+
+
+end
+
+function drive_to_and_face_door(serPort, angle)
+
+% hard-coded center of hallway is 0.9m from wall
+
+end
+
+function correct_angle(serPort)
+% call find_largest_door, compute angle and then turn that angle
+
+end
+
+function perform_door_knock(serPort)
+
+
+end
+
+
+
+
 
 
 %% PLOTTING %%%%%%%%%%%%%%%%%%%%%
