@@ -81,7 +81,6 @@ function [pixels, centroid, img] = analyze_image(url, color)
 % img - the image taken
 
     % constants
-    % TODO-dean describe what the constants mean
     THRESH = 50;
     RATIO_THRESH = .08;
 
@@ -92,7 +91,6 @@ function [pixels, centroid, img] = analyze_image(url, color)
     [pixels, centroid] = analyze_blob(blob);
 
 end
-
 
 function [color] = choose_color(url)
 % Take an image and choose a color by clicking on it
@@ -113,7 +111,6 @@ function [color] = choose_color(url)
     disp(color);
 
 end
-
 
 function [pixels, centroid] = analyze_blob(blob)
 % Find the pixels and centroid of a blob
@@ -304,11 +301,17 @@ function [masked] = apply_mask(img, color, thresh, ratioThresh)
 end
 
 function smim = smooth_image(im)
+    % Performs a gaussian filter, migrated from starter code given to us
+    % to handle rgb values instead of just grayscale
+    %
+    % Input:
+    % img - the original image
+    %
+    % Ouput:
+    % smim - the smoothed out image
 
-    % 5 works for now
+    % 5 works for now as our sigma for the filter
     sigma = 5;
-    
-    %assert(ndims(im) == 2, 'Image must be greyscale');
     
     % If needed convert im to double
     if ~strcmp(class(im(:,:,1)),'double')
@@ -347,7 +350,7 @@ function move_robot(serPort, size_change, horizontal_change)
 %   horizontal movement, which is based on image size. Should be -1<x<1.
 
     % handle bump
-    if checkForBump(serPort)
+    if check_for_bump(serPort)
         throw('OH NO I BUMPED!');
     end
     
@@ -430,29 +433,16 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
     
 end
 
-function [BumpRight, BumpLeft, BumpFront] = check_for_bump(serPort)
-% Reads the bump sensors, handling possible NaN.
-%
-% Input:
-% serPort - for robot access
-%
-% Output: 
-% Bump sensor readings.
-    
-    [BumpRight,BumpLeft,~,~,~,BumpFront] ...
-        = BumpsWheelDropsSensorsRoomba(serPort);
-
-    while (isnan(BumpRight) || isnan(BumpLeft) || isnan(BumpFront))
-        [BumpRight, BumpLeft , ~, ~, ~, BumpFront] ...
-            = BumpsWheelDropsSensorsRoomba(serPort);
-    end
-    
-end
-
 
 %% DOOR FINDER %%%%%%
 
 function door_finder(serPort)
+    % Main loop of our solution to part 2 of the homework. Drives down the
+    % hallway looking for a door, then drives to the door and knocks on it
+    % beeps and drives through
+    %
+    % Input:
+    % serPort - for robot access
 
     disp('door_finder');
 
@@ -477,13 +467,12 @@ function door_finder(serPort)
     disp('drive_to_door');
     drive_to_door(serPort, angle);
     
-        disp('face_door');
+    disp('face_door');
     face_door(serPort, angle);
     
     disp('find_door');
     img = imread(url);
     [found, door] = find_door(img);
-    imshow(door); drawnow;
     
     if ~found
         disp('OH NO, LOST THE DOOR! Starting over and trying again.')
@@ -492,11 +481,12 @@ function door_finder(serPort)
         return;
     end
     
-        disp('turn_angle');
+    disp('turn_angle');
     angle = get_angle_from_door(door);
 
-        disp('turn_angle');
-    turn_angle(serPort, angle * pi/180);
+    disp('turn_angle');
+    % TIMES 2 BECAUSE IF IT'S LEFT HALF OF SCREEN, ANGLE ISN'T GREAT ENOUGH
+    turn_angle(serPort, angle * 2 * pi/180);
     
     disp('perform_door_knock');
     perform_door_knock(serPort);
@@ -504,61 +494,54 @@ function door_finder(serPort)
 end
 
 function [found, door] = find_door(img)
+    % Attemps to find a single door by looking for all doors and picking
+    % the biggest most viable candidate
+    %
+    % Input:
+    % img - the original image
+    %
+    % Ouput:
+    % found - whether we found any viable candidates
+    % door - the mask containing the single door
+    
+    DOOR_COLOR = [100,106,130]; %NOT ACCURATE, GOOD FOR AFTER FILTERS
 
-    DOOR_COLOR = [100,106,130]; %NOT ACCURATE, AFTER FILTERS
-
-    door_mask = find_doors(img, 0, DOOR_COLOR);
+    door_mask = find_doors(img, DOOR_COLOR);
     
     [found, door] = find_largest_door(door_mask);
 
 end
 
-function [door_mask] = find_doors(img, edge_mask, color)
-    %edge_mask will be null for now
-    blended = blend_image(img);
-    figure(1);
-    imshow(blended);
+function [door_mask] = find_doors(img, color)
+    % Performs a "door mask" which essentially highlights all areas of the
+    % image that are the blue of the door. Because of all the complications
+    % of similar colors in the hallway (like the teal overhang) we use some
+    % color expanding algorithms to try and identify the blue doors as
+    % distinct
+    %
+    % Input:
+    % img - the original image
+    % color - the color of the door we're looking for
+    %
+    % Ouput:
+    % door_mask - the mask with all potential doors
+    
     smooth = smooth_image(img);
-    figure(2);
-    imshow(smooth);
     expanded = expand_colors(smooth);
-    figure(3);
-    imshow(expanded);
     door_mask = apply_mask(expanded, color, 20, .05);
-    figure(4);
-    imshow(door_mask);
-    drawnow;
-
-end
-
-function blended = blend_image(img)
-
-    saturated = im2bw(rgb2gray(img), .8);
-
-    mfImg = img;
-    mfImg(:,:,1)=medfilt2(img(:,:,1), [100,100]);
-    mfImg(:,:,2)=medfilt2(img(:,:,2), [100,100]);
-    mfImg(:,:,3)=medfilt2(img(:,:,3), [100,100]);
-    blended = mask_image(1-saturated, img) + mask_image(saturated, mfImg);
-
-end
-
-function masked = mask_image(mask, img)
-    s = size(img);
-    rows = s(1);
-    cols = s(2);
-    masked = img;
-    for row = 1:rows
-        for col = 1:cols
-            if(~mask(row,col))
-                masked(row,col,:) = 0;
-            end
-        end
-    end
 
 end
 
 function [found, door] = find_largest_door(door_mask)
+    % Finds the biggest blob in the door mask and makes sure its big enough
+    % to count (5% of the screen at least) then returns it
+    %
+    % Input:
+    % door_mask - the mask containing all the doors
+    %
+    % Ouput:
+    % found - if any doors were found
+    % door - the biggest door blob that's valid
     door = get_largest_blob(door_mask);
     thresh = .05; % PERCENT OF ENTIRE PIC
     
@@ -570,25 +553,32 @@ function [found, door] = find_largest_door(door_mask)
 end
 
 function [angle] = get_angle_from_door(door)
+    % Given a door in an image, find the angle to that door
+    %
+    % Input:
+    % door - the mask with the door blob
+    %
+    % Ouput:
+    % angle - the angle from the robo to the door
+    
     [~, centroid] = analyze_blob(door);
     center = size(door,2)/2;
     horizontal = (centroid(2) - center)/center;
     angle = angle_from_horizontal(horizontal);
-    disp('HOR, ANGL');
-    disp([horizontal, angle]);
 end
 
 function expanded = expand_colors(img)
-    %{
-    hsv_image = rgb2hsv(img);
-    hsv_image(:,:,2) = 1;
-    expanded = hsv2rgb(hsv_image);
-
-    expanded = img;
-    expanded(:,:,1) = histeq(img(:,:,1));
-    expanded(:,:,2) = histeq(img(:,:,2));
-    expanded(:,:,3) = histeq(expanded(:,:,3));
-    %}
+    % Does some work to "expand" the colors making things like "teal" stick
+    % out from blue. This is because similar colors provided too many false
+    % positives for door detection. Performs a decorrelated stretch, linear
+    % combination, and checks against over saturation.
+    %
+    % Input:
+    % img - the original, smoothed image
+    %
+    % Ouput:
+    % expanded - the new and improved image for processing
+    
     newImg = decorrstretch(img);
     expanded = imlincomb(.7, img, .3, newImg);
 
@@ -606,20 +596,34 @@ function expanded = expand_colors(img)
 
 end
 
-
 function [angle] = angle_from_horizontal(horizontal)
+    % Given a number between -1 and 1 representing the horizontal location
+    % of something, what's the angle in real terms for the robot? uses
+    % constants determined by our camera view angle
+    %
+    % Input:
+    % horizontal, -1 <-> 1 representing how left or right on the image it
+    % is
+    %
+    % Ouput:
+    % angle - the angle from the robot to whatever spot we're talking about
+    
+    
     %constants to tweak:
     distance_to_plane = 1; % pick 1m
     width_of_plane = 0.85; % measured with camera
     
     half_angle = atand((width_of_plane/2)/distance_to_plane);
     angle = half_angle * -horizontal;
-    %positive is to the right, negative is to the left..
-    %can change that obvs
 end
 
 function perform_door_knock(serPort)
-
+    % Performs a knock on the door by driving until bump, backing up, and
+    % driving until bump, and then backing up again
+    %
+    % Input:
+    % serPort - for robot access
+    
     fwdSpeed = 0.2;
     time_back = 0.5;
     
@@ -638,12 +642,17 @@ function perform_door_knock(serPort)
 end
 
 function drive_to_bump(serPort, fwdSpeed)
+    % Drive until you hit the wall, for door knocking stuff
+    %
+    % Input:
+    % serPort - for robot access
+    % fwdSpeed - how fast to move
 
     drive_straight(serPort, fwdSpeed);
     
-    bumped = checkForBump(serPort);
+    bumped = check_for_bump(serPort);
     while ~bumped
-        bumped = checkForBump(serPort);
+        bumped = check_for_bump(serPort);
     end
     
     stop_robot(serPort);
@@ -651,6 +660,12 @@ function drive_to_bump(serPort, fwdSpeed)
 end
 
 function drive_to_door(serPort, angle)
+    % Given the angle to the door, drive down the hallway until you're next
+    % to the door, uses constants like the hallway width to determine this
+    %
+    % Input:
+    % serPort - for robot access
+    % angle - angle to the desired door
 
     dist_to_wall = 0.9;
     fwdSpeed = 0.2;
@@ -664,6 +679,11 @@ function drive_to_door(serPort, angle)
 end
 
 function face_door(serPort, angle)
+    % Turns to face the door, either 90 or -90
+    %
+    % Input:
+    % serPort - for robot access
+    % angle - the original angle to the door, so we know which way to turn
 
     if angle > 0
         turn_angle(serPort, pi/2);
@@ -674,9 +694,73 @@ function face_door(serPort, angle)
 end
 
 
+%% HALLWAY FOLLOW %%%%%%%%%%%%%%%%%%%%%%
+
+function hall_follow(serPort)
+    % Simple loop that follows the bright lights of the hallway
+    %
+    % Input:
+    % serPort - for robot access
+
+    url = camera_url();
+    while(true)
+        img = imread(url);
+        horizontal = find_hallway_center(img);
+        move_robot(serPort, .5, horizontal); % .5 means max fwd speed
+    end
+end
+
+function horizontal = find_hallway_center(img)
+    % Walks the image, 10 pixel columns at a time and finds which column is
+    % the brightest. It offsets by 5 pixels so checks the image very
+    % accurately. Used to identify the bright lights of the center of the
+    % hallway.
+    %
+    % Input:
+    % img - what the robot is seeing right now
+    %
+    % Output:
+    % horizontal - the -1 <-> 1 value that represents the brightest column
+    % aka probably the hallway lights
+
+    total1s = 0;
+    s = size(img);
+    height = s(1);
+    width = s(2);
+    bestBrightness = -1;
+    currentBestCol = -1;
+    currentTotal = 0;
+    currentPixels = 0;
+    currentStartCol = 1;
+    max = currentStartCol + 10;
+    bright = im2bw(rgb2gray(img),.95);
+    while(max <=width)
+        for col = currentStartCol:max
+            for row = 1:height
+                currentTotal = currentTotal + bright(row,col);
+                currentPixels = currentPixels + 1;
+                total1s = total1s + bright(row,col);
+            end
+        end
+        average = currentTotal / currentPixels;
+        if(average > bestBrightness)
+           bestBrightness = average;
+           currentBestCol = max-5;
+        end
+        currentTotal = 0;
+        currentPixels = 0;
+        currentStartCol = currentStartCol + 5;
+        max = currentStartCol + 10;
+    end
+    center = size(img,2)/2;
+    horizontal = (currentBestCol - center)/center;
+end
+
+
 %% ROBOT UTILITIES %%%%%%%%%%%%%%%%%%%%%
 
 function drive_distance(serPort, fwdSpeed, dist)
+    % Drive straight for some distance
 
     DistanceSensorRoomba(serPort);
 
@@ -693,7 +777,8 @@ function drive_distance(serPort, fwdSpeed, dist)
 end
 
 function drive_time(serPort, fwdSpeed, time)
-
+    % drive straight for some period of time
+    
     t = tic;
     drive_straight(serPort, fwdSpeed);
     while (toc(t) < time)
@@ -704,7 +789,10 @@ function drive_time(serPort, fwdSpeed, time)
 end
 
 function drive_straight(serPort, fwdSpeed)
-
+    % drive straight (can have ang compensation for fast speeds but found
+    % that this hw didn't require it
+    
+    
     angCompensate = 0.0;
 
     SetFwdVelAngVelCreate(serPort, fwdSpeed, angCompensate*fwdSpeed);
@@ -712,6 +800,7 @@ function drive_straight(serPort, fwdSpeed)
 end
 
 function stop_robot(serPort)
+    % simply stops the robo
 
     SetFwdVelAngVelCreate(serPort, 0, 0);
     
@@ -768,7 +857,7 @@ function [angTurned] = turn_angle(serPort, angToTurn)
     
 end
 
-function [bumped] = checkForBump(serPort)
+function [bumped] = check_for_bump(serPort)
 % simply reads the bump sensors
 %
 % Input:
