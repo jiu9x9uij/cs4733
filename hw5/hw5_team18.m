@@ -4,12 +4,9 @@
 
 %% MAIN METHOD %%%%%%%%%%%%%%%%%%%%%
 
-function hw5_team18(serPort, part_2)
+function hw5_team18(serPort, part)
 
-    % clear any persitent variables in functions
-    clear functions;
-    
-	% clear the cache
+    % clear the cache
     clc;
     
     % poll sensors to avoid getting NaN values and clear odometry
@@ -17,69 +14,119 @@ function hw5_team18(serPort, part_2)
     DistanceSensorRoomba(serPort);
     AngleSensorRoomba(serPort); 
     
-    if part_2
-        door_finder(serPort);
-    else
+    if part == 1
         color_tracker(serPort);
+    elseif part == 2
+        door_finder(serPort);
+    elseif part == 3
+        hall_follow(serPort);
     end
+
+    disp('DONE!');
     
 end
 
 function [url] = camera_url()
-    camera_ip = '192.168.1.100';
-    url = strcat('http://', camera_ip, '/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0');
+% Get the URL of the IP camera.
+%
+% Output: 
+% url - the url for reading images
+
+    url = 'http://192.168.1.100/snapshot.cgi?user=admin&pwd=&resolution=16&rate=0';
+
 end
 
 
 %% COLOR TRACKER %%%%%%%%%%%%%%%%%%%%%
 
 function color_tracker(serPort)
+% Track and follow a target object as it moves around, maintaining a constant distance.
+% 
+% Input:
+% serPort - Serial port for communicating with robot
+
     url = camera_url();
-    % one time stuff for user to choose color
-    % HAVE USER SELECT COLOR
-    startImg = imread(url);
-    p = ChoosePoint(startImg);
-    startSmooth = smooth_image(startImg);
-    disp(p);
-    color = startSmooth(p(2),p(1),:);
-    disp('COLOR: ');
-    color = [color(1), color(2), color(3)];
-    disp(color);
-    %at this point we have the desired color, removing anomolies
-    masked = apply_mask(startSmooth, color, 50, .08);
-    originalBlob = get_largest_blob(masked);
-    [originalPixels, ~] = analyzeBlob(originalBlob);
+
+    color = choose_color(url);
+
+    [originalPixels, ~, ~] = analyze_image(url, color);
+
     while true
         
-        %ask for image
-        img = getImage(url);
-        %get correct blob
-        masked = apply_mask(img, color, 50, .08);
-        blob = get_largest_blob(masked);
-        
-        
-        %analyze blob for horizontal and size
-        %[size_change, horizontal_change] = analyzeBlobs(originalBlob, blob);
-        [newPixels, centroid] = analyzeBlob(blob);
-        imshow(blob);
-        drawnow;
-        size_change = newPixels / originalPixels;
+        [pixels, centroid, img] = analyze_image(url, color);
+
+        size_change = pixels / originalPixels;
         center = size(img,2)/2;
         horizontal_change = (centroid(2) - center)/center;
-        
-        %call move robot stuff
-        move_robot(serPort, size_change, horizontal_change);
-        fprintf('SIZE CHANGE: %.3f    HORIZONTAL:  %.3f\n', size_change, horizontal_change);     
-    end
 
+        fprintf('SIZE: %.3f    HORIZONTAL: %.3f\n', size_change, horizontal_change);
+        
+        move_robot(serPort, size_change, horizontal_change);
+
+    end
 
 end
 
-function [pixels, centroid] = analyzeBlob(blob)
+function [pixels, centroid, img] = analyze_image(url, color)
+% Take an image and find the pixels and centroid of the
+% largest blob matching the color in the image.
+%
+% Input:
+% url - ip camera url
+% color - color to track
+%
+% Output:
+% pixels - pixels of the largest blob
+% centroid - centroid of the largest blob
+% img - the image taken
+
+    % constants
+    % TODO-dean describe what the constants mean
+    THRESH = 50;
+    RATIO_THRESH = .08;
+
+    img = imread(url);
+    smooth = smooth_image(img);
+    masked = apply_mask(smooth, color, THRESH, RATIO_THRESH);
+    blob = get_largest_blob(masked);
+    [pixels, centroid] = analyze_blob(blob);
+
+end
+
+
+function [color] = choose_color(url)
+% Take an image and choose a color by clicking on it
+%
+% Input:
+% url - ip camera url
+%
+% Output:
+% color - the color chosen by the user
+
+    img = imread(url);
+    p = choose_point(img);
+    smooth = smooth_image(img);
+    color = smooth(p(2),p(1),:);
+    color = [color(1), color(2), color(3)];
+
+    disp('COLOR: ');
+    disp(color);
+
+end
+
+
+function [pixels, centroid] = analyze_blob(blob)
+% Find the pixels and centroid of a blob
+%
+% Input:
+% blob - mask representing largest blob
+%
+% Output:
+% pixels - pixels of the blob
+% centroid - centroid of the blob
 
     pixels = 0;
     centroid = [0,0];
-    % area + centroid
     s = size(blob);
     height = s(1);
     width = s(2);
@@ -93,30 +140,34 @@ function [pixels, centroid] = analyzeBlob(blob)
     end
 
     centroid = centroid / pixels;
+
 end
 
-function [ pos ] = ChoosePoint( img )
-%ChosePoint( image )
-%   Takes an image, prompt user to choose point, return color of point
+function [pos] = choose_point(img)
+% Prompts user to choose a point on the image
+%
+% Input:
+% img - the image to choose from
+%
+% Output:
+% pos - position chosen by user
+
     f = figure();
     image(img);
-    
-    % gets an input from the figure
-    % if the user exits the figure instead, try again
     pos = round(ginput(1));
-    %disp(p);
-    
-    % reallocate the color, flipping the x/y coordinates
-    
-    %color = img(p(2),p(1),:);
-    %color = [color(1), color(2), color(3)];
-    %disp(color);
-    
     close(f);
 
 end
 
-function blob = get_largest_blob(img)
+function [blob] = get_largest_blob(img)
+% Find the largest blob in an image
+%
+% Input:
+% img - the image to search
+%
+% Output:
+% blob - the largest blob in the image
+
     biggestBlobCount = 0;
     s = size(img);
     height = s(1);
@@ -124,19 +175,31 @@ function blob = get_largest_blob(img)
     blob = zeros(height, width);
     for row = 1:height
        for col = 1:width
-           if(img(row,col)==1)
+           if( img(row,col)==1)
               [maybeBlob, count] = growBlob(img, row,col);
               img = img - maybeBlob;
-              if(count > biggestBlobCount)
+              if (count > biggestBlobCount)
                   blob = maybeBlob;
                   biggestBlobCount = count;
               end
            end
        end
     end
+
 end
 
 function [blob, count] = growBlob(img, row, col)
+% Identify a blob by growing up, down, left, right
+%
+% Input:
+% img - the image to search
+% row - starting point row
+% col - starting point col
+%
+% Output:
+% blob - the blob from the starting point
+% count - number of pixels in the blob
+
     max_size = 300;
     q = zeros(max_size,2);
     queue_front = 0;
@@ -147,20 +210,22 @@ function [blob, count] = growBlob(img, row, col)
     blob = zeros(s);
     hash = zeros(s);
     count = 0;
+
+    incr_queue = @(idx,max) mod(idx,max) + 1;
     
     queue_back = incr_queue(queue_back, max_size);
     
     q(queue_back,:) = [row,col];
     added = 0;
-    while(queue_back~=queue_front)
-        %pop off the queue
+    while (queue_back~=queue_front)
+        % pop off the queue
         queue_front = incr_queue(queue_front, max_size);
         pos = q(queue_front,:);
-        %set the spot on the blob
+        % set the spot on the blob
         blob(pos(1),pos(2)) = 1;
         count = count + 1;
-        %walk through above, below, left and right
-        %and add them to the queue if they aren't already marked
+        % walk through above, below, left and right
+        % and add them to the queue if they arent already marked
         if(pos(1) + 1 <= height && (hash(pos(1)+1,pos(2))==0) && img(pos(1)+1,pos(2))==1)
             queue_back = incr_queue(queue_back, max_size);
             q(queue_back,:) = [pos(1)+1,pos(2)];
@@ -187,38 +252,19 @@ function [blob, count] = growBlob(img, row, col)
         end
     end
 
-
 end
 
-function new_idx = incr_queue(idx,max)
-    new_idx = mod(idx,max) +1;
-end
-
-function img = getImage(location)
-% Read image and apply gaussian filter to remove noise
-%
-% Input:                                                  
-% location - the location of the image to read
-% 
-% Ouput:
-% img - the image post filter
-
-    input = imread(location);
-    img = smooth_image(input);
-end
-
-function masked = apply_mask(img, color, thresh, ratioThresh)
+function [masked] = apply_mask(img, color, thresh, ratioThresh)
 % Filter out everything except stuff within range of our color
-% TODO - why/how did them peeps use proportional masks??
 %
 % Input:
-% inputImg - the original image
-% 
-% color - The target color that we're looking for
+% img - the original image
+% color - The target color that were looking for
+% thresh - threshold for simple mask
+% ratioThresh - threshold for ratio mask
 %
 % Ouput:
 % masked - the image mask
-    
 
     red = double(color(1));
     green = double(color(2));
@@ -300,29 +346,6 @@ function move_robot(serPort, size_change, horizontal_change)
 % horizontal_change - Ratio of centroid_horizontal_movement to max centroid
 %   horizontal movement, which is based on image size. Should be -1<x<1.
 
-    %{
-
-    % keep track of position for debugging
-    persistent pos;
-    if isempty(pos)
-        pos = [0,0,0];
-    end
-
-    % read sensors
-    dist = DistanceSensorRoomba(serPort);
-    ang = AngleSensorRoomba(serPort);
-
-    % update odometry
-    pos(3) = mod(pos(3) + ang, 2*pi);
-    pos(1) = pos(1) + dist * cos(pos(3));
-    pos(2) = pos(2) + dist * sin(pos(3));
-    
-    % print odometry
-    % fprintf('(%.3f, %.3f, %.3f)\n', pos(1), pos(2), pos(3)*(180/pi));
-    plot_position(pos);
-
-    %}
-
     % handle bump
     if checkForBump(serPort)
         throw('OH NO I BUMPED!');
@@ -390,7 +413,7 @@ function [fwd_vel, ang_vel] = get_robot_vel(size_change, horizontal_change)
     end
 
        
-    % if change btwn [-buff,buff], don't move
+    % if change btwn [-buff,buff], dont move
     horiz_buff = 0.1;
     
     if horizontal_change > horiz_buff
@@ -490,12 +513,6 @@ function [found, door] = find_door(img)
 
 end
 
-%for now let's not worry about this guy...
-function [edge_mask] = find_vertical_edges(img)
-
-
-end
-
 function [door_mask] = find_doors(img, edge_mask, color)
     %edge_mask will be null for now
     blended = blend_image(img);
@@ -553,7 +570,7 @@ function [found, door] = find_largest_door(door_mask)
 end
 
 function [angle] = get_angle_from_door(door)
-    [~, centroid] = analyzeBlob(door);
+    [~, centroid] = analyze_blob(door);
     center = size(door,2)/2;
     horizontal = (centroid(2) - center)/center;
     angle = angle_from_horizontal(horizontal);
@@ -771,30 +788,3 @@ function [bumped] = checkForBump(serPort)
     bumped = BumpRight || BumpLeft || BumpFront;
 end
 
-
-
-
-%% PLOTTING %%%%%%%%%%%%%%%%%%%%%
-
-function plot_position(pos)
-% Plots (x,y,theta), with position in blue and orientation in green.
-%
-% Input:
-% pos - Robot position to display
-
-    % draw on figure 1
-    figure(1);
-    hold on;
-    
-    % plot position
-    plot(pos(1), pos(2), 'b.');
-    
-    % plot orientation
-    dispOrientation = 0.25;
-    plot([pos(1),pos(1)+dispOrientation*cos(pos(3))], ...
-         [pos(2),pos(2)+dispOrientation*sin(pos(3))], 'g');
-    
-    % flush plot
-    drawnow;
-     
-end
