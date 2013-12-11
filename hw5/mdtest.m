@@ -6,8 +6,7 @@ function mdtest()
     
     
     img = imread(url);
-    smoothed = smooth_image(img);
-    masked = find_hallway_center(smoothed);
+    masked = find_hallway_center(img);
     
     figure(1);
     imshow(img);
